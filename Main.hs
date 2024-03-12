@@ -22,19 +22,6 @@ safeDivEx a b c =
     handler _ = return Nothing
 
 --
---- 2) Maybes in, Maybes out
-
-maybeDiv :: (Eq a, Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeDiv (Just n) (Just 0) = Nothing
-maybeDiv (Just n) (Just d) = Just (n / d)
-maybeDiv Nothing _ = Nothing
-maybeDiv _ Nothing = Nothing
-
--- not idomatic, but v nice(?)
-maybeDivEx :: Maybe Double
-maybeDivEx = Just 16 `maybeDiv` Just 2 `maybeDiv` Just 0
-
---
 --- 3) Idiomatic style
 
 safeDiv :: (Eq a, Fractional a) => a -> a -> Maybe a
@@ -58,7 +45,7 @@ bindEx :: (Eq b, Fractional b) => b -> b -> b -> Maybe b
 bindEx a b c = (a `safeDiv`) =<< (b `safeDiv` c)
 
 --
---- 4) Utilising NaN funkiness
+--- 4) Handling NaN funkiness
 
 -- NaN is part of Float type
 
@@ -87,7 +74,35 @@ nonZeroEx a b c = do
   d2 <- mkNonZero c
   return $ a `nonZeroDiv` d1 `nonZeroDiv` d2
 
----
+--
+--- Maybe Ops
+
+maybeAdd :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
+maybeAdd (Just x) (Just y) = Just (x + y)
+maybeAdd _ _ = Nothing
+
+maybeSub :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
+maybeSub (Just x) (Just y) = Just (x - y)
+maybeSub _ _ = Nothing
+
+maybeMul :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
+maybeMul (Just x) (Just y) = Just (x * y)
+maybeMul _ _ = Nothing
+
+maybeDiv :: (Eq a, Fractional a) => Maybe a -> Maybe a -> Maybe a
+maybeDiv (Just n) (Just 0) = Nothing
+maybeDiv (Just n) (Just d) = Just (n / d)
+maybeDiv Nothing _ = Nothing
+maybeDiv _ Nothing = Nothing
+
+maybeDivEx :: (Eq a, Fractional a) => a -> a -> a -> Maybe a
+maybeDivEx a b c = Just a `maybeDiv` Just b `maybeDiv` Just c
+
+maybeEx = Just (-10.1) `maybeMul` Just 1 `maybeAdd` Just 9.0 `maybeSub` Just 0 `maybeDiv` Just 1
+
+maybeIntEx = Just (-10) `maybeMul` Just 1 `maybeAdd` Just 9 `maybeSub` Just 0 `maybeDiv` Just 1
+
+maybeRatEx = Just (10 :: Rational) `maybeDiv` Just (3 :: Rational) `maybeMul` Just (3 :: Rational)
 
 main :: IO ()
 main = do
@@ -106,7 +121,11 @@ test = do
 
   putStrLn $ "simpleEx: " <> show (simpleEx 16 2 1)
 
-  putStrLn $ "maybeDivEx: " <> show maybeDivEx
+  putStrLn $ "maybeEx: " <> show maybeEx
+
+  putStrLn $ "maybeIntEx: " <> show maybeIntEx
+
+  putStrLn $ "maybeRatEx: " <> show maybeRatEx
 
   putStrLn $ "nonZeroEx: " <> show (nonZeroEx 16 2 1)
 
