@@ -1,4 +1,6 @@
-import Data.Maybe (isNothing)
+import Control.Monad (guard)
+import Data.Complex (Complex ((:+)), magnitude)
+import Data.Maybe (fromMaybe, isNothing)
 import Test.QuickCheck
 
 -----------------------------------------
@@ -7,39 +9,64 @@ import Test.QuickCheck
 --- Maybe Ops
 
 -- Infix Operators
+
 infixl 6 +?
+
+(+?) :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a)
+(+?) (Just x) (Just y) = Just (x + y)
+(+?) _ _ = Nothing
 
 infixl 6 -?
 
+(-?) :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a)
+(-?) (Just x) (Just y) = Just (x - y)
+(-?) _ _ = Nothing
+
 infixl 7 *?
+
+(*?) :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a)
+(*?) (Just x) (Just y) = Just (x * y)
+(*?) _ _ = Nothing
 
 infixl 7 /?
 
-maybeAdd :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeAdd (Just x) (Just y) = Just (x + y)
-maybeAdd _ _ = Nothing
+(/?) :: (Eq a, RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a)
+(/?) mx my = do
+  x <- mx
+  y <- my
+  guard (y /= 0) -- Prevent division by zero
+  return (x / y)
 
-x +? y = maybeAdd x y -- Just an alias for convenience
+sqrtMaybe :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a)
+sqrtMaybe (Just a) = Just (sqrt a)
+sqrtMaybe Nothing = Nothing
 
-maybeSub :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeSub (Just x) (Just y) = Just (x - y)
-maybeSub _ _ = Nothing
+-- Lexicographic (real only) ordering
 
-x -? y = maybeSub x y
+infix 4 <?
 
-maybeMul :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeMul (Just x) (Just y) = Just (x * y)
-maybeMul _ _ = Nothing
+(<?) :: (Ord a, Eq a, RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe Bool
+(<?) Nothing _ = Nothing
+(<?) _ Nothing = Nothing
+(<?) (Just (ar :+ _)) (Just (br :+ _)) = Just $ ar < br
 
-x *? y = maybeMul x y
+infix 4 >?
 
-maybeDiv :: (Eq a, Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeDiv (Just n) (Just 0) = Nothing
-maybeDiv (Just n) (Just d) = Just (n / d)
-maybeDiv Nothing _ = Nothing
-maybeDiv _ Nothing = Nothing
+(>?) :: (Ord a, Eq a, RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe Bool
+(>?) Nothing _ = Nothing
+(>?) _ Nothing = Nothing
+(>?) (Just (ar :+ _)) (Just (br :+ _)) = Just $ ar > br
 
-x /? y = maybeDiv x y
+absMaybe :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a)
+absMaybe (Just a) = Just $ magnitude a :+ 0
+absMaybe _ = Nothing
+
+infix 4 ~=
+
+(~=) :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe Bool
+(~=) a b = absMaybe (a -? b) <? epsilon
+  where
+    epsilon = Just 1e-9 -- Define your tolerance level here
 
 -----------------------------------------
 
@@ -49,69 +76,86 @@ main = do
 
 -----------------------------------------
 
--- Property test for the identity property of addition
-prop_addIdentity :: Rational -> Bool
+-- -- Property test for the identity property of addition
+prop_addIdentity :: (RealFloat a) => Complex a -> Bool
 prop_addIdentity x =
-  Just x +? Just 0 == Just x
-    && Just 0 +? Just x == Just x
+  Just x +? Just (0 :+ 0) == Just x
+    && Just (0 :+ 0) +? Just x == Just x
 
-prop_addCommutative :: Rational -> Rational -> Bool
+prop_addCommutative :: (RealFloat a) => Complex a -> Complex a -> Bool
 prop_addCommutative x y =
   Just x +? Just y == Just y +? Just x
 
-prop_mulCommutative :: Rational -> Rational -> Bool
+prop_mulCommutative :: (RealFloat a) => Complex a -> Complex a -> Bool
 prop_mulCommutative x y =
   Just x *? Just y == Just y *? Just x
 
-prop_addAssociative :: Rational -> Rational -> Rational -> Bool
+prop_addAssociative :: (RealFloat a) => Complex a -> Complex a -> Complex a -> Bool
 prop_addAssociative x y z =
-  (Just x +? Just y) +? Just z == Just x +? (Just y +? Just z)
+  fromMaybe False $ (Just x +? Just y) +? Just z ~= Just x +? (Just y +? Just z)
 
-prop_mulAssociative :: Rational -> Rational -> Rational -> Bool
+prop_mulAssociative :: (RealFloat a) => Complex a -> Complex a -> Complex a -> Bool
 prop_mulAssociative x y z =
-  (Just x *? Just y) *? Just z == Just x *? (Just y *? Just z)
+  fromMaybe False $ (Just x *? Just y) *? Just z ~= Just x *? (Just y *? Just z)
 
-prop_distributiveMulOverAdd :: Rational -> Rational -> Rational -> Bool
+prop_distributiveMulOverAdd :: (RealFloat a) => Complex a -> Complex a -> Complex a -> Bool
 prop_distributiveMulOverAdd x y z =
-  Just x *? (Just y +? Just z) == (Just x *? Just y) +? (Just x *? Just z)
+  fromMaybe False $ Just x *? (Just y +? Just z) ~= (Just x *? Just y) +? (Just x *? Just z)
 
-prop_operationWithNothing :: (Maybe Rational -> Maybe Rational -> Maybe Rational) -> Rational -> Bool
+prop_operationWithNothing :: (RealFloat a) => (Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a)) -> Complex a -> Bool
 prop_operationWithNothing op x =
   isNothing (op (Just x) Nothing)
     && isNothing (op Nothing (Just x))
     && isNothing (op Nothing Nothing)
 
-prop_divByItself :: Rational -> Property
+prop_divByItself :: (RealFloat a) => Complex a -> Property
 prop_divByItself x = x /= 0 ==> Just x /? Just x == Just 1
 
-prop_divByZero :: Rational -> Bool
+prop_divByZero :: (RealFloat a) => Complex a -> Bool
 prop_divByZero x = isNothing (Just x /? Just 0)
 
-prop_addSubInverse :: Rational -> Rational -> Bool
+prop_addSubInverse :: (RealFloat a) => Complex a -> Complex a -> Bool
 prop_addSubInverse a b =
-  (Just a +? Just b) -? Just b == Just a
+  fromMaybe False $ (Just a +? Just b) -? Just b ~= Just a
 
-prop_mulDivInverse :: Rational -> Rational -> Property
+prop_mulDivInverse :: (RealFloat a) => Complex a -> Complex a -> Property
 prop_mulDivInverse a b =
   b
     /= 0
-      ==> (Just a *? Just b)
+      ==> fromMaybe False
+    $ (Just a *? Just b)
       /? Just b
-    == Just a
+      ~= Just a
 
 test :: IO ()
 test = do
-  quickCheck prop_addIdentity
-  quickCheck prop_addCommutative
-  quickCheck prop_mulCommutative
-  quickCheck prop_addAssociative
-  quickCheck prop_mulAssociative
-  quickCheck prop_distributiveMulOverAdd
-  quickCheck (prop_operationWithNothing maybeAdd)
-  quickCheck (prop_operationWithNothing maybeSub)
-  quickCheck (prop_operationWithNothing maybeMul)
-  quickCheck (prop_operationWithNothing maybeDiv)
-  quickCheck prop_divByItself
-  quickCheck prop_divByZero
-  quickCheck prop_addSubInverse
-  quickCheck prop_mulDivInverse
+  print $ Just (1 :+ 1) +? Just (1 :+ 1)
+
+  putStrLn "prop_addIdentity"
+  quickCheck (prop_addIdentity :: Complex Double -> Bool)
+  putStrLn "prop_addCommutative"
+  quickCheck (prop_addCommutative :: Complex Double -> Complex Double -> Bool)
+  putStrLn "prop_mulCommutative"
+  quickCheck (prop_mulCommutative :: Complex Double -> Complex Double -> Bool)
+  putStrLn "prop_addAssociative"
+  quickCheck (prop_addAssociative :: Complex Double -> Complex Double -> Complex Double -> Bool)
+  putStrLn "prop_mulAssociative"
+  quickCheck (prop_mulAssociative :: Complex Double -> Complex Double -> Complex Double -> Bool)
+  putStrLn "prop_distributiveMulOverAdd"
+  quickCheck (prop_distributiveMulOverAdd :: Complex Double -> Complex Double -> Complex Double -> Bool)
+  putStrLn "prop_operationWithNothing (+?)"
+  quickCheck (prop_operationWithNothing (+?) :: Complex Double -> Bool)
+  putStrLn "prop_operationWithNothing (-?)"
+  quickCheck (prop_operationWithNothing (-?) :: Complex Double -> Bool)
+  putStrLn "prop_operationWithNothing (*?)"
+  quickCheck (prop_operationWithNothing (*?) :: Complex Double -> Bool)
+  putStrLn "prop_operationWithNothing (/?)"
+  quickCheck (prop_operationWithNothing (/?) :: Complex Double -> Bool)
+  putStrLn "prop_divByItself"
+  quickCheck (prop_divByItself :: Complex Double -> Property)
+  putStrLn "prop_divByZero"
+  quickCheck (prop_divByZero :: Complex Double -> Bool)
+  putStrLn "prop_addSubInverse"
+  quickCheck (prop_addSubInverse :: Complex Double -> Complex Double -> Bool)
+  putStrLn "prop_mulDivInverse"
+  quickCheck (prop_mulDivInverse :: Complex Double -> Complex Double -> Property)
