@@ -3,7 +3,7 @@ import Control.Monad (guard)
 import Data.Complex (Complex ((:+)), magnitude, mkPolar, polar)
 import Data.Function ((&))
 import Data.Maybe (fromMaybe, isNothing)
-import Test.QuickCheck
+import Test.QuickCheck (Arbitrary, Property, quickCheck, (==>))
 
 -----------------------------------------
 
@@ -74,9 +74,6 @@ abs' = fmap (\a -> magnitude a :+ 0)
 negate' :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a)
 negate' = fmap negate
 
--- nex1 = negate' 1
--- nex2 = negate' (Just (2 :+ 0))
-
 infix 4 =~
 
 (=~) :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe Bool
@@ -136,10 +133,10 @@ f m1 m2 r = g ⊗ m1 ⊗ m2 ⊘ sq r
   where
     g = to 6.67 ⊗ (to 10 ⊗⊗ negate' (to 11))
 
-f' :: (RealFloat a, Num (Maybe (Complex a))) => Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a) -> Maybe (Complex a)
-f' m1 m2 r = g ⊗ m1 ⊗ m2 ⊘ sq r
-  where
-    g = to 6.67 ⊗ (to 10 ⊗⊗ negate' 11)
+fib :: (RealFloat a) => Maybe (Complex a) -> Maybe (Complex a)
+fib (Just (0 :+ 0)) = to 0
+fib (Just (1 :+ 0)) = to 1
+fib n = fib (n ⊖ to 1) ⊕ fib (n ⊖ to 2)
 
 -----------------------------------------
 
@@ -213,6 +210,8 @@ test = do
   print eulerID
 
   print $ f (to (2 :: Double)) (to (2 :: Double)) (to (2 :: Double))
+
+  print $ fib (Just (10 :+ 0))
 
   putStrLn "prop_addIdentity"
   quickCheck (prop_addIdentity :: Complex Double -> Bool)
