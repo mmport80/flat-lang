@@ -1,132 +1,123 @@
-import Control.Exception (SomeException, catch)
-import Control.Monad (join)
-import NonZero (NonZero (..), mkNonZero)
+module Main (main, runParserTests) where
 
---
---- 1) Imperative style?
+import Data.List (intercalate)
+-- Replace the existing whitespace invariance test with this one
+-- Import required modules if not already imported
 
--- Attempt division and catch any exceptions, returning Nothing in case of an exception
+import Data.Void (Void)
+import NameValidator (validateProgram)
+import Parse (Expr, TopLevel, parseProgram)
+import System.Environment (getArgs)
+import Test.QuickCheck
+  ( Arbitrary (arbitrary),
+    Property,
+    Testable (property),
+    choose,
+    counterexample,
+    elements,
+    quickCheck,
+    vectorOf,
+    (==>),
+  )
+import Text.Megaparsec (ParseErrorBundle)
 
-safeDivEx :: Int -> Int -> Int -> IO (Maybe Int)
-safeDivEx _ _ 0 = return Nothing -- Immediate return of Nothing if dividing by 0
-safeDivEx _ 0 _ = return Nothing -- Immediate return of Nothing if dividing by 0
-safeDivEx a b c =
-  catch
-    ( do
-        let result = a `div` b `div` c
-        return $ Just result
-    )
-    handler
-  where
-    handler :: SomeException -> IO (Maybe Int)
-    handler _ = return Nothing
+-- Generate valid identifier names
+newtype ValidName = ValidName String
+  deriving (Show)
 
---
---- 3) Idiomatic style
+instance Arbitrary ValidName where
+  arbitrary = do
+    firstChar <- elements ['a' .. 'z']
+    restLength <- choose (0, 10)
+    rest <- vectorOf restLength $ elements $ ['a' .. 'z'] ++ ['0' .. '9']
+    return $ ValidName (firstChar : rest)
 
-safeDiv :: (Eq a, Fractional a) => a -> a -> Maybe a
-safeDiv _ 0 = Nothing
-safeDiv x y = Just (x / y)
+-- Pipeline equivalence properties
+prop_pipelineDivEquiv :: ValidName -> Double -> Property
+prop_pipelineDivEquiv (ValidName x) n =
+  n
+    /= 0
+      ==> let expr1 = x ++ " |> /" ++ show n
+              expr2 = x ++ " / " ++ show n
+           in parseProgram (makeAssignment "result" expr1) == parseProgram (makeAssignment "result" expr2)
 
--- likeable apart from the join
+prop_pipelinePostDivEquiv :: ValidName -> Double -> Property
+prop_pipelinePostDivEquiv (ValidName x) n =
+  n
+    /= 0
+      ==> let expr1 = x ++ " |> " ++ show n ++ "/"
+              expr2 = show n ++ " / " ++ x
+           in parseProgram (makeAssignment "result" expr1) == parseProgram (makeAssignment "result" expr2)
 
-fmapEx :: (Eq a, Fractional a) => a -> a -> a -> Maybe a
-fmapEx a b c = join $ fmap (a `safeDiv`) (b `safeDiv` c)
+-- Correct property test for whitespace invariance
+prop_whitespaceInvariance :: ValidName -> Double -> Double -> Property
+prop_whitespaceInvariance (ValidName x) n1 n2 =
+  let -- The different spacing patterns to test
+      spacings = [" ", "\t", "\n", " \n ", "\t\n\t"]
 
--- Clunky
+      -- Create a proper expression using the identifier as a variable name
+      -- and then use n1 and n2 in a simple addition expression
+      makeExpr :: String -> String
+      makeExpr spaces = x ++ spaces ++ "=" ++ spaces ++ show n1 ++ spaces ++ "+" ++ spaces ++ show n2
 
-doEx :: (Eq b, Fractional b) => b -> b -> b -> Maybe b
-doEx a b c = do
-  a' <- a `safeDiv` b
-  a' `safeDiv` c
+      -- The expressions to parse (without nesting them in another assignment)
+      expressions = map makeExpr spacings
 
--- most idiomatic?
-bindEx :: (Eq b, Fractional b) => b -> b -> b -> Maybe b
-bindEx a b c = (a `safeDiv`) =<< (b `safeDiv` c)
+      -- Parse each expression
+      results = map parseProgram expressions
 
---
---- 4) Handling NaN funkiness
+      -- Show exact output values for debugging
+      showParsed :: String -> Either (ParseErrorBundle String Void) [TopLevel] -> String
+      showParsed expr result = "Input: \"" ++ expr ++ "\"\nParsed as: " ++ show result ++ "\n"
 
--- NaN is part of Float type
+      -- Create detailed debug output
+      debugInfo = unlines $ zipWith showParsed expressions results
 
-simpleEx :: (RealFloat a) => a -> a -> a -> Maybe a
-simpleEx a b c =
-  let result = a / b / c
-   in if isNaN result then Nothing else Just result
+      -- Check if all results are equal to the first result
+      allEqual = all (== head results) (tail results)
+   in counterexample
+        ( "Expressions with different whitespace produced different results:\n"
+            ++ "Identifier: "
+            ++ show x
+            ++ "\n"
+            ++ "Number 1: "
+            ++ show n1
+            ++ "\n"
+            ++ "Number 2: "
+            ++ show n2
+            ++ "\n"
+            ++ debugInfo
+        )
+        allEqual
 
---
---- 5) Naive Example
+-- Helper to make a complete assignment
+makeAssignment :: String -> String -> String
+makeAssignment name expr = name ++ " = " ++ expr
 
--- Can cause exception. Bad idea
-simpleDivEx :: (Integral a) => a -> a -> a -> a
-simpleDivEx a b c = a `div` b `div` c
-
---
---- 6) Smart Constructor
-
-nonZeroDiv :: (Fractional a, Eq a) => a -> NonZero a -> a
-nonZeroDiv numerator (NonZero denominator) = numerator / denominator
-
--- not convinced
-nonZeroEx :: (Eq b, Fractional b) => b -> b -> b -> Maybe b
-nonZeroEx a b c = do
-  d1 <- mkNonZero b
-  d2 <- mkNonZero c
-  return $ a `nonZeroDiv` d1 `nonZeroDiv` d2
-
---
---- Maybe Ops
-
-maybeAdd :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeAdd (Just x) (Just y) = Just (x + y)
-maybeAdd _ _ = Nothing
-
-maybeSub :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeSub (Just x) (Just y) = Just (x - y)
-maybeSub _ _ = Nothing
-
-maybeMul :: (Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeMul (Just x) (Just y) = Just (x * y)
-maybeMul _ _ = Nothing
-
-maybeDiv :: (Eq a, Fractional a) => Maybe a -> Maybe a -> Maybe a
-maybeDiv (Just n) (Just 0) = Nothing
-maybeDiv (Just n) (Just d) = Just (n / d)
-maybeDiv Nothing _ = Nothing
-maybeDiv _ Nothing = Nothing
-
-maybeDivEx :: (Eq a, Fractional a) => a -> a -> a -> Maybe a
-maybeDivEx a b c = Just a `maybeDiv` Just b `maybeDiv` Just c
-
-maybeEx = Just (-10.1) `maybeMul` Just 1 `maybeAdd` Just 9.0 `maybeSub` Just 0 `maybeDiv` Just 1
-
-maybeIntEx = Just (-10) `maybeMul` Just 1 `maybeAdd` Just 9 `maybeSub` Just 0 `maybeDiv` Just 1
-
-maybeRatEx = Just (10 :: Rational) `maybeDiv` Just (3 :: Rational) `maybeMul` Just (3 :: Rational)
+-- Main property test function
+runParserTests :: IO ()
+runParserTests = do
+  putStrLn "Testing pipeline division equivalence..."
+  quickCheck prop_pipelineDivEquiv
+  putStrLn "Testing pipeline postfix division equivalence..."
+  quickCheck prop_pipelinePostDivEquiv
+  putStrLn "Testing whitespace invariance..."
+  quickCheck prop_whitespaceInvariance
 
 main :: IO ()
 main = do
-  print "Hello World"
-
-test :: IO ()
-test = do
-  sdx <- safeDivEx 16 2 1
-  putStrLn $ "safeDivEx: " <> show sdx
-
-  putStrLn $ "fmapEx: " <> show (fmapEx 16 2 1)
-
-  putStrLn $ "bindEx: " <> show (bindEx 16 2 1)
-
-  putStrLn $ "doEx: " <> show (doEx 16 2 1)
-
-  putStrLn $ "simpleEx: " <> show (simpleEx 16 2 1)
-
-  putStrLn $ "maybeEx: " <> show maybeEx
-
-  putStrLn $ "maybeIntEx: " <> show maybeIntEx
-
-  putStrLn $ "maybeRatEx: " <> show maybeRatEx
-
-  putStrLn $ "nonZeroEx: " <> show (nonZeroEx 16 2 1)
-
-  putStrLn $ "simpleDivEx: " <> show (simpleDivEx 16 2 0)
+  args <- getArgs
+  case args of
+    [filename] -> do
+      contents <- readFile filename
+      case parseProgram contents of
+        Left parseError ->
+          putStrLn $ "Parse error: " ++ show parseError
+        Right ast ->
+          case validateProgram ast of
+            Left validationError ->
+              putStrLn $ "Validation error: " ++ validationError
+            Right () -> do
+              putStrLn "Program is valid!"
+    -- Here you could continue with evaluation
+    _ -> putStrLn "Usage: program <filename>  "
