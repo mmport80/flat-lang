@@ -26,11 +26,11 @@ actually using combinations
 
 Open development environment:
 
-´nix develop´
+`nix develop`
 
 Run property tests:
 
-´ghcid --command="ghci Main.hs" --test=":run runParserTests"´
+`ghcid --command="ghci Main.hs" --test=":run runParserTests"`
 
 Interactively parse:
 
