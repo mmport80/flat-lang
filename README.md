@@ -20,3 +20,27 @@
 - Tuples?
 - Maps?
 actually using combinations
+
+
+# Commands
+
+Open development environment:
+
+´nix develop´
+
+Run property tests:
+
+´ghcid --command="ghci Main.hs" --test=":run runParserTests"´
+
+Interactively parse:
+
+```
+ghci Parse.hs
+
+ghci> parseProgram "x = 1 + 2"
+Right [NamedValue "x" (BinOp Add (Lit (1.0 :+ 0.0)) (Lit (2.0 :+ 0.0)))]
+```
+
+Parse a file:
+
+`ghcid --command="ghci Main.hs" --test=":run main examples.flat"`
