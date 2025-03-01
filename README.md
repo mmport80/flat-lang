@@ -44,3 +44,16 @@ Right [NamedValue "x" (BinOp Add (Lit (1.0 :+ 0.0)) (Lit (2.0 :+ 0.0)))]
 Parse a file:
 
 `ghcid --command="ghci Main.hs" --test=":run main examples.flat"`
+
+Run ops tests:
+
+`ghcid --command="ghci Ops.hs" --test=":run test"`
+
+Run operations:
+
+```
+ghci Ops.hs
+
+ghci> show $ from $ pythC (to 1) (to 1)
+"Right 1.4142135623730951"
+```
