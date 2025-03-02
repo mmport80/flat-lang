@@ -4,8 +4,13 @@ import Data.List (intercalate)
 -- Replace the existing whitespace invariance test with this one
 -- Import required modules if not already imported
 
+-- In Main.hs, add:
+
+import Data.Map qualified as Map
 import Data.Void (Void)
+import Eval (evalProgram)
 import NameValidator (validateProgram)
+import Ops (from)
 import Parse (Expr, TopLevel, parseProgram)
 import System.Environment (getArgs)
 import Test.QuickCheck
@@ -20,6 +25,28 @@ import Test.QuickCheck
     (==>),
   )
 import Text.Megaparsec (ParseErrorBundle)
+
+evalFile :: FilePath -> IO ()
+evalFile filename = do
+  contents <- readFile filename
+  case parseProgram contents of
+    Left err -> putStrLn $ "Parse error: " ++ show err
+    Right ast ->
+      case validateProgram ast of
+        Left err -> putStrLn $ "Validation error: " ++ err
+        Right () ->
+          case evalProgram ast of
+            Left err -> putStrLn $ "Evaluation error: " ++ err
+            Right env -> do
+              putStrLn "Evaluated program:"
+              mapM_
+                ( \(k, v) -> do
+                    putStr $ k ++ " = "
+                    case from v of
+                      Right val -> print val
+                      Left err -> putStrLn $ "Error: " ++ err
+                )
+                $ Map.toList env
 
 -- Generate valid identifier names
 newtype ValidName = ValidName String

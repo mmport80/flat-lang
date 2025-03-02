@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
+module Ops (Cell, abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘)) where
+
 import Control.Applicative (liftA2)
 import Control.Monad (guard)
 import Data.Complex (Complex ((:+)), magnitude, mkPolar, polar)
