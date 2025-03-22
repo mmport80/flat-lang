@@ -41,7 +41,7 @@ liftCellUnary f name (Cell op1) =
 infixl 6 ⊕
 
 (⊕) :: (RealFloat a) => Cell a -> Cell a -> Cell a
-(⊕) = liftCell (liftA2 (+)) "sub"
+(⊕) = liftCell (liftA2 (+)) "sum"
 
 infixl 6 ⊖
 
@@ -57,6 +57,16 @@ infixl 7 ⊘
 
 (⊘) :: (RealFloat a) => Cell a -> Cell a -> Cell a
 (⊘) = liftCell (liftA2 (/)) "divide"
+
+debugDivision :: (RealFloat a, Show a) => a -> a -> String
+debugDivision a b =
+  let c1 = to a
+      c2 = to b
+      result = c1 ⊘ c2
+   in case result of
+        Cell op -> case op.result of
+          Nothing -> "Result is Nothing"
+          Just (r :+ i) -> "Result is " ++ show r ++ " + " ++ show i ++ "i"
 
 sqrt' :: (RealFloat a) => Cell a -> Cell a
 sqrt' = liftCellUnary (fmap sqrt) "sqrt"
@@ -115,8 +125,9 @@ to :: (Num a) => a -> Cell a
 to a = Cell (Operation "constant" (Just $ a :+ 0) [])
 
 -- TODO: from 'fat number' to non complex number.. this could be a problem..
-from :: (Eq b, Num b) => Cell b -> Either String b
+from :: (Eq b, RealFloat b) => Cell b -> Either String b
 from (Cell op) = case op.result of
+  Just (r :+ i) | isNaN r || isNaN i -> Left "Error: divide by zero or 0 ^ 0"
   Just (r :+ 0) -> Right r
   Just (_ :+ _) -> Left "Error: root of a negative number"
   Nothing -> Left "Error: divide by zero or 0 ^ 0"
