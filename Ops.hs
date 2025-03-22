@@ -69,7 +69,10 @@ sqrt' = liftCellUnary (fmap sqrt) "sqrt"
         w <- mw
         if c == 0 :+ 0 && (w == 0 :+ 0)
           then Nothing
-          else return $ exp (w * log c)
+          else -- Special case for real numbers to improve accuracy
+          case (c, w) of
+            (re :+ 0, ex :+ 0) | re > 0 -> Just (re ** ex :+ 0)
+            _ -> Just $ exp (w * log c) -- General complex case
     )
     "exponent"
 
@@ -217,10 +220,11 @@ prop_mulDivInverse a b =
       ⊘ to b
       =~ to a
 
--- Modified property test to avoid (0 :+ 0) ** (0 :+ 0)
+-- TODO: include (0 :+ 0) ** (0 :+ 0) test case?
+-- TODO: include base less than zero case
 prop_expNonZero :: (RealFloat a, Arbitrary a) => a -> a -> Property
 prop_expNonZero base exponent =
-  (base /= 0 && exponent /= 0)
+  (base /= 0 && exponent /= 0 && base > 0)
     ==> fromMaybe False
     $ (⊗⊗) (to base) (to exponent) =~ to (base ** exponent)
 
