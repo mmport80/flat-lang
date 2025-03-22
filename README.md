@@ -28,7 +28,7 @@ Open development environment:
 
 `nix develop`
 
-Run property tests:
+Run Flat Lang syntax property tests:
 
 `ghcid --command="ghci Main.hs" --test=":run runParserTests"`
 
@@ -45,7 +45,7 @@ Parse a file:
 
 `ghcid --command="ghci Main.hs" --test=":run main examples.flat"`
 
-Run ops tests:
+Run Flat Lang operations tests:
 
 `ghcid --command="ghci Ops.hs" --test=":run test"`
 
