@@ -5,18 +5,23 @@ module Ops (Cell, abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘)) wh
 
 import Control.Applicative (liftA2)
 import Control.Monad (guard)
-import Data.Complex (Complex ((:+)), magnitude, mkPolar, polar)
+import Data.Complex (Complex ((:+)), imagPart, magnitude, mkPolar, polar, realPart)
 import Data.Either (isLeft)
 import Data.Function (on, (&))
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Ratio (Rational, denominator, numerator, (%))
 import Data.Sequence qualified as Seq
+import GHC.Base (when)
+import GHC.IO (unsafePerformIO)
 import Test.QuickCheck (Arbitrary, Property, quickCheck, (==>))
 
 -----------------------------------------
 
 data ComplexRational = CR Rational Rational -- real and imaginary parts
   deriving (Eq, Show)
+
+newtype Cell = Cell
+  {operation :: Operation}
 
 -- Update Operation to use this
 data Operation = Operation
@@ -43,26 +48,118 @@ divCR (CR r1 i1) (CR r2 i2) =
 mulCR :: ComplexRational -> ComplexRational -> ComplexRational
 mulCR (CR r1 i1) (CR r2 i2) = CR (r1 * r2 - i1 * i2) (r1 * i2 + i1 * r2)
 
--- Exponentiation for ComplexRational
 powCR :: ComplexRational -> ComplexRational -> Maybe ComplexRational
-powCR _ (CR 0 0) = Nothing -- Undefined 0^0
+powCR (CR 0 0) (CR 0 0) = Nothing -- 0^0 = Nothing (undefined)
 powCR (CR 0 0) _ = Just (CR 0 0) -- 0^n = 0 for n ≠ 0
+powCR (CR 0 i) _ | i /= 0 = Nothing -- (0+i)^n is undefined in our implementation
 
--- Integer exponents (exact calculation)
+-- CASE 1: Integer exponents - use exact rational arithmetic
 powCR base (CR exp 0)
   | denominator exp == 1 =
       let n = numerator exp
        in if n >= 0
             then Just $ intPowCR base (fromIntegral n)
-            else fmap recipCR $ Just $ intPowCR base (fromIntegral (-n))
--- Approximate other cases via Double
-powCR (CR a b) (CR c d) =
-  let aD = fromRational a :: Double
-      bD = fromRational b :: Double
-      cD = fromRational c :: Double
-      dD = fromRational d :: Double
-      (rD :+ iD) = (aD :+ bD) ** (cD :+ iD)
-   in Just (CR (toRational rD) (toRational iD))
+            else divCR (CR 1 0) (intPowCR base (fromIntegral (-n)))
+-- CASE 2: Integer base, simple roots (1/n) - check for exact integer roots
+powCR (CR base 0) (CR exp 0)
+  | denominator base == 1 && numerator exp == 1 =
+      let baseInt = numerator base
+          rootN = denominator exp
+       in case exactIntegerRoot baseInt rootN of
+            Just root -> Just $ CR (fromInteger root) 0
+            Nothing -> directPowCR (CR (toRational base) 0) (CR exp 0)
+-- CASE 3: Simple rational base, simple roots - check for exact rational roots
+powCR (CR a 0) (CR b 0)
+  | numerator b == 1 =
+      let n = denominator b
+          numRoot = exactIntegerRoot (numerator a) n
+          denRoot = exactIntegerRoot (denominator a) n
+       in case (numRoot, denRoot) of
+            (Just numR, Just denR) -> Just $ CR (fromInteger numR % fromInteger denR) 0
+            _ -> directPowCR (CR a 0) (CR b 0)
+-- CASE 4: All other cases - use floating point approximation
+powCR base exp = directPowCR base exp
+
+-- Check if an integer has an exact integer nth root
+exactIntegerRoot :: Integer -> Integer -> Maybe Integer
+exactIntegerRoot base n
+  | n <= 0 = Nothing
+  | base < 0 && even n = Nothing -- Negative base with even root
+  | base < 0 = fmap negate $ exactIntegerRoot (negate base) n
+  | base == 0 = Just 0
+  | base == 1 = Just 1
+  | otherwise =
+      -- Try a direct computation first
+      let root = floor $ fromInteger base ** (1 / fromInteger n)
+       in if root ^ n == base
+            then Just root
+            else Nothing -- Not a perfect power
+
+-- Direct floating-point calculation for when exact methods aren't possible
+directPowCR :: ComplexRational -> ComplexRational -> Maybe ComplexRational
+directPowCR base exp =
+  let baseD = toComplexDouble base
+      expD = toComplexDouble exp
+      resultD = baseD ** expD
+   in if isNaN (realPart resultD)
+        || isNaN (imagPart resultD)
+        || isInfinite (realPart resultD)
+        || isInfinite (imagPart resultD)
+        then Nothing
+        else Just (fromComplexDouble resultD)
+
+-- Helper to convert to Complex Double for computation
+toComplexDouble :: ComplexRational -> Complex Double
+toComplexDouble (CR a b) = (fromRational a :+ fromRational b)
+
+-- Helper to convert from Complex Double back to ComplexRational
+fromComplexDouble :: Complex Double -> ComplexRational
+fromComplexDouble (a :+ b) = CR (toRational a) (toRational b)
+
+-- Calculate exact roots where possible
+exactRoot :: ComplexRational -> Int -> Maybe ComplexRational
+exactRoot (CR r 0) n
+  | r >= 0 =
+      -- Perfect integer root
+      let rootR = toRational (fromRational r ** (1 / fromIntegral n :: Double))
+          -- Check if this is exact by raising back to power
+          checkPower = rootR ^ n
+       in if checkPower == r
+            then Just (CR rootR 0)
+            else complexRoot (CR r 0) n
+-- For negative reals, exact roots may have imaginary parts
+exactRoot (CR r 0) n
+  | r < 0 && odd n =
+      Just (CR (negate (toRational ((-fromRational r) ** (1 / fromIntegral n :: Double)))) 0)
+-- For other cases, use complex root calculation
+exactRoot z n = complexRoot z n
+
+-- Proper complex root calculation
+complexRoot :: ComplexRational -> Int -> Maybe ComplexRational
+complexRoot (CR a b) n =
+  -- For pure real numbers, can do direct calculation
+  if b == 0
+    then
+      let rootVal = fromRational a ** (1 / fromIntegral n :: Double)
+       in if isNaN rootVal || isInfinite rootVal
+            then Nothing
+            else Just (CR (toRational rootVal) 0)
+    else -- For complex numbers, convert to polar form
+
+      let aD = fromRational a
+          bD = fromRational b
+          -- r = magnitude, theta = argument
+          r = sqrt (aD * aD + bD * bD)
+          theta = atan2 bD aD
+          -- nth root in polar form: r^(1/n) * e^(i*theta/n)
+          rootR = r ** (1 / fromIntegral n)
+          newTheta = theta / fromIntegral n
+          -- Convert back to Cartesian
+          newReal = rootR * cos newTheta
+          newImag = rootR * sin newTheta
+       in if isNaN newReal || isNaN newImag
+            then Nothing
+            else Just (CR (toRational newReal) (toRational newImag))
 
 -- Helper for integer powers
 intPowCR :: ComplexRational -> Int -> ComplexRational
@@ -71,21 +168,6 @@ intPowCR z 1 = z
 intPowCR z n
   | even n = let half = intPowCR z (n `div` 2) in mulCR half half
   | otherwise = mulCR z (intPowCR z (n - 1))
-
--- Helper for reciprocal
-recipCR :: ComplexRational -> ComplexRational
-recipCR z = case divCR (CR 1 0) z of
-  Just r -> r
-  Nothing -> error "Reciprocal of zero"
-
--- data Operation = Operation
---   { opName :: String,
---     result :: Maybe (Complex Rational),
---     inputs :: [Operation]
---   }
-
-newtype Cell = Cell
-  {operation :: Operation}
 
 --
 ---'Fat' Ops
@@ -121,17 +203,6 @@ infixl 7 ⊘
 
 (⊘) :: Cell -> Cell -> Cell
 (⊘) = liftCell (\ma mb -> ma >>= \a -> mb >>= \b -> divCR a b) "divide"
-
-{- debugDivision :: (Fractional a, Show a) => a -> a -> String
-debugDivision a b =
-  let c1 = to a
-      c2 = to b
-      result = c1 ⊘ c2
-   in case result of
-        Cell op -> case op.result of
-          Nothing -> "Result is Nothing"
-          Just (r :+ i) -> "Result is " ++ show r ++ " + " ++ show i ++ "i"
- -}
 
 sqrtCR :: ComplexRational -> Maybe ComplexRational
 sqrtCR (CR 0 0) = Just (CR 0 0)
@@ -204,9 +275,30 @@ negate' = liftCellUnary (fmap negate) "negate"
 infix 4 =~
 
 (=~) :: Cell -> Cell -> Maybe Bool
-(=~) a b = abs' (a ⊖ b) ≪ epsilon
-  where
-    epsilon = to 1e-9 -- Define your tolerance level here
+(=~) a b = do
+  -- Extract values from cells
+  aVal <- (\(Cell op) -> op.result) a
+  bVal <- (\(Cell op) -> op.result) b
+
+  -- Get magnitudes
+  let magnitudeA = magnitudeCR aVal
+  let magnitudeB = magnitudeCR bVal
+
+  -- Special case: if both are zero, they're equal
+  if magnitudeA == 0 && magnitudeB == 0
+    then return True
+    else do
+      -- Calculate the absolute difference
+      let diff = magnitudeCR (aVal `subCR` bVal)
+
+      -- Calculate the scale (using the maximum magnitude)
+      let scale = max magnitudeA magnitudeB
+
+      -- For large numbers, use relative tolerance
+      -- For small numbers, still use absolute tolerance
+      if scale > 1
+        then return (diff / scale < 1e-10) -- Relative tolerance: diff/max < threshold
+        else return (diff < 1e-10) -- Absolute tolerance for small numbers
 
 ------
 
@@ -222,10 +314,6 @@ from (Cell op) = case op.result of
 
 -----------------------------------------
 
-{- main :: IO ()
-main = do
-  print "Hello World"
- -}
 -- 'test 1'
 t1 :: Cell -> Cell -> Maybe Bool
 t1 a b = (a ⊘ b) ⊗ b ⊖ a ⊕ a ≫ abs' (sqrt' b)
@@ -321,11 +409,15 @@ prop_mulDivInverse a b =
 
 -- TODO: include (0 :+ 0) ** (0 :+ 0) test case?
 -- TODO: include base less than zero case
-prop_expNonZero :: (RealFloat a, Fractional a, Arbitrary a) => a -> a -> Property
+prop_expNonZero :: (Show a, RealFloat a, Fractional a, Arbitrary a) => a -> a -> Property
 prop_expNonZero base exponent =
-  (base /= 0 && exponent /= 0 && base > 0)
-    ==> fromMaybe False
-    $ (⊗⊗) (to base) (to exponent) =~ to (base ** exponent)
+  ( base /= 0
+      && exponent /= 0
+      && base > 0
+      && exponent < 20 -- Limiting exponent to prevent extremely large values
+  )
+    ==> do
+      fromMaybe False $ (⊗⊗) (to base) (to exponent) =~ to (base ** exponent)
 
 -- Property test to check that 0 ** 0 returns Nothing
 prop_zeroToZero :: Bool
@@ -395,53 +487,53 @@ test = do
   -- print $ from $ fib $ to 10
 
   -- TODO: use complex double instead of just double
-  -- putStrLn "prop_addIdentity"
-  -- quickCheck (prop_addIdentity :: Double -> Bool)
-  -- putStrLn "prop_addCommutative"
-  -- quickCheck (prop_addCommutative :: Double -> Double -> Bool)
-  -- putStrLn "prop_mulCommutative"
-  -- quickCheck (prop_mulCommutative :: Double -> Double -> Bool)
-  -- putStrLn "prop_addAssociative"
-  -- quickCheck (prop_addAssociative :: Double -> Double -> Double -> Bool)
-  -- putStrLn "prop_mulAssociative"
-  -- quickCheck (prop_mulAssociative :: Double -> Double -> Double -> Bool)
-  -- putStrLn "prop_distributiveMulOverAdd"
-  -- quickCheck (prop_distributiveMulOverAdd :: Double -> Double -> Double -> Bool)
-  -- putStrLn "prop_divByItself"
-  -- quickCheck (prop_divByItself :: Double -> Property)
-  -- putStrLn "prop_divByZero"
-  -- quickCheck (prop_divByZero :: Double -> Bool)
-  -- putStrLn "prop_addSubInverse"
-  -- quickCheck (prop_addSubInverse :: Double -> Double -> Bool)
-  -- putStrLn "prop_mulDivInverse"
-  -- quickCheck (prop_mulDivInverse :: Double -> Double -> Property)
+  putStrLn "prop_addIdentity"
+  quickCheck (prop_addIdentity :: Double -> Bool)
+  putStrLn "prop_addCommutative"
+  quickCheck (prop_addCommutative :: Double -> Double -> Bool)
+  putStrLn "prop_mulCommutative"
+  quickCheck (prop_mulCommutative :: Double -> Double -> Bool)
+  putStrLn "prop_addAssociative"
+  quickCheck (prop_addAssociative :: Double -> Double -> Double -> Bool)
+  putStrLn "prop_mulAssociative"
+  quickCheck (prop_mulAssociative :: Double -> Double -> Double -> Bool)
+  putStrLn "prop_distributiveMulOverAdd"
+  quickCheck (prop_distributiveMulOverAdd :: Double -> Double -> Double -> Bool)
+  putStrLn "prop_divByItself"
+  quickCheck (prop_divByItself :: Double -> Property)
+  putStrLn "prop_divByZero"
+  quickCheck (prop_divByZero :: Double -> Bool)
+  putStrLn "prop_addSubInverse"
+  quickCheck (prop_addSubInverse :: Double -> Double -> Bool)
+  putStrLn "prop_mulDivInverse"
+  quickCheck (prop_mulDivInverse :: Double -> Double -> Property)
 
   putStrLn "prop_expNonZero"
-  quickCheck (prop_expNonZero :: Double -> Double -> Property) -- }
+  quickCheck (prop_expNonZero :: Double -> Double -> Property)
 
--- putStrLn "prop_expZero"
--- quickCheck (prop_zeroToZero :: Bool)
--- -- Add after your existing tests
--- putStrLn "prop_zeroByZero"
--- quickCheck prop_zeroByZero
--- putStrLn "prop_smallDenominator"
--- quickCheck prop_smallDenominator
--- putStrLn "prop_negativeBasePower"
--- quickCheck prop_negativeBasePower
+  putStrLn "prop_expZero"
+  quickCheck (prop_zeroToZero :: Bool)
 
--- putStrLn "prop_exactAddition"
--- quickCheck prop_exactAddition
+  putStrLn "prop_zeroByZero"
+  quickCheck prop_zeroByZero
+  putStrLn "prop_smallDenominator"
+  quickCheck prop_smallDenominator
+  putStrLn "prop_negativeBasePower"
+  quickCheck prop_negativeBasePower
 
--- putStrLn "prop_floatingPointAddition"
--- quickCheck prop_floatingPointAddition
+  putStrLn "prop_exactAddition"
+  quickCheck prop_exactAddition
 
--- putStrLn "prop_precisionLoss"
--- quickCheck prop_precisionLoss
--- putStrLn "prop_errorPropagation"
--- quickCheck prop_errorPropagation
--- putStrLn "prop_sqrtNegative"
--- quickCheck prop_sqrtNegative
--- putStrLn "prop_multipleErrors"
--- quickCheck prop_multipleErrors
--- putStrLn "prop_mulDivIdentityNearZero"
--- quickCheck prop_mulDivIdentityNearZero
+  putStrLn "prop_floatingPointAddition"
+  quickCheck prop_floatingPointAddition
+
+  putStrLn "prop_precisionLoss"
+  quickCheck prop_precisionLoss
+  putStrLn "prop_errorPropagation"
+  quickCheck prop_errorPropagation
+  putStrLn "prop_sqrtNegative"
+  quickCheck prop_sqrtNegative
+  putStrLn "prop_multipleErrors"
+  quickCheck prop_multipleErrors
+  putStrLn "prop_mulDivIdentityNearZero"
+  quickCheck prop_mulDivIdentityNearZero
