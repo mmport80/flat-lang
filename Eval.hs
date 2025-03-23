@@ -13,9 +13,9 @@ import Ops (Cell (..), abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘
 import Parse (Expr (..), Op (..), TopLevel (..), UnaryOp (..))
 
 -- Type aliases for clarity
-type EvalEnv = Map String (Cell Double)
+type EvalEnv = Map String Cell
 
-type EvalResult = Either String (Cell Double)
+type EvalResult = Either String Cell
 
 -- Evaluate a full program, returning the final environment
 evalProgram :: [TopLevel] -> Either String EvalEnv
