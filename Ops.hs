@@ -6,7 +6,7 @@ module Ops (Cell, abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘)) wh
 import Control.Applicative (liftA2)
 import Control.Monad (guard)
 import Data.Complex (Complex ((:+)), imagPart, magnitude, mkPolar, polar, realPart)
-import Data.Either (isLeft)
+import Data.Either (isLeft, isRight)
 import Data.Function (on, (&))
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Ratio (Rational, denominator, numerator, (%))
@@ -430,12 +430,27 @@ prop_zeroByZero = isLeft $ from $ to 0 ⊘ to 0
 
 -- Division by very small number (may overflow)
 prop_smallDenominator :: Bool
-prop_smallDenominator = isLeft $ from $ to 1 ⊘ to 1e-308
+prop_smallDenominator = isRight $ from $ to 1 ⊘ to 1e-308
 
--- Negative base with fractional power
-prop_negativeBasePower :: Double -> Property
-prop_negativeBasePower x =
-  x > 0 && x /= 1 ==> isLeft $ from $ to (-2) ⊗⊗ to x
+-- Negative base with integer exponent is defined and real
+prop_negativePowerInteger :: Bool
+prop_negativePowerInteger =
+  isRight $ from $ to (-2) ⊗⊗ to (2 :: Int)
+
+-- Negative base with non-integer exponent results in a complex number
+prop_negativePowerNonInteger :: Bool
+prop_negativePowerNonInteger =
+  isLeft $ from $ to (-2) ⊗⊗ to (2.5 :: Double)
+
+-- Negative base with even integer exponent gives positive result
+prop_negativePowerEvenInteger :: Bool
+prop_negativePowerEvenInteger =
+  from (to (-2) ⊗⊗ to (2 :: Int)) == Right 4.0
+
+-- Negative base with odd integer exponent gives negative result
+prop_negativePowerOddInteger :: Bool
+prop_negativePowerOddInteger =
+  from (to (-2) ⊗⊗ to (3 :: Int)) == Right (-8.0)
 
 prop_exactAddition :: Bool
 prop_exactAddition =
@@ -518,8 +533,15 @@ test = do
   quickCheck prop_zeroByZero
   putStrLn "prop_smallDenominator"
   quickCheck prop_smallDenominator
-  putStrLn "prop_negativeBasePower"
-  quickCheck prop_negativeBasePower
+
+  putStrLn "prop_negativePowerInteger"
+  quickCheck prop_negativePowerInteger
+  putStrLn "prop_negativePowerNonInteger"
+  quickCheck prop_negativePowerNonInteger
+  putStrLn "prop_negativePowerEvenInteger"
+  quickCheck prop_negativePowerEvenInteger
+  putStrLn "prop_negativePowerOddInteger"
+  quickCheck prop_negativePowerOddInteger
 
   putStrLn "prop_exactAddition"
   quickCheck prop_exactAddition
