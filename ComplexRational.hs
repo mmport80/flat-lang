@@ -61,7 +61,7 @@ sqrtCR (CR r i) =
 
 -- Conversions between ComplexRational and Complex Double
 toComplexDouble :: ComplexRational -> Complex Double
-toComplexDouble (CR a b) = (fromRational a :+ fromRational b)
+toComplexDouble (CR a b) = fromRational a :+ fromRational b
 
 fromComplexDouble :: Complex Double -> ComplexRational
 fromComplexDouble (a :+ b) = CR (toRational a) (toRational b)
@@ -92,13 +92,19 @@ powCR base exp =
 
 -- For Num instance
 instance Num ComplexRational where
+  (+) :: ComplexRational -> ComplexRational -> ComplexRational
   (+) = addCR
+  (-) :: ComplexRational -> ComplexRational -> ComplexRational
   (-) = subCR
+  (*) :: ComplexRational -> ComplexRational -> ComplexRational
   (*) = mulCR
+  negate :: ComplexRational -> ComplexRational
   negate (CR r i) = CR (negate r) (negate i)
+  abs :: ComplexRational -> ComplexRational
   abs z@(CR r i) =
     let magDouble = sqrt (fromRational r * fromRational r + fromRational i * fromRational i)
      in CR (toRational magDouble) 0
+  signum :: ComplexRational -> ComplexRational
   signum z@(CR r i) =
     if r == 0 && i == 0
       then CR 0 0
@@ -106,6 +112,7 @@ instance Num ComplexRational where
         let magDouble = sqrt (fromRational r * fromRational r + fromRational i * fromRational i)
             magnitude = toRational magDouble
          in CR (r / magnitude) (i / magnitude)
+  fromInteger :: Integer -> ComplexRational
   fromInteger n = CR (fromInteger n) 0
 
 -- Direct floating-point calculation for when exact methods aren't possible

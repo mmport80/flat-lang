@@ -20,6 +20,10 @@ import Test.QuickCheck (Arbitrary, Property, quickCheck, (==>))
 newtype Cell = Cell
   {operation :: Operation}
 
+instance Eq Cell where
+  -- Two cells are equal if their results are equal
+  (Cell op1) == (Cell op2) = op1.result == op2.result
+
 -- Update Operation to use this
 data Operation = Operation
   { opName :: String,
@@ -235,7 +239,7 @@ prop_mulDivInverse a b =
 
 -- TODO: include (0 :+ 0) ** (0 :+ 0) test case?
 -- TODO: include base less than zero case
-prop_expNonZero :: (Show a, RealFloat a, Fractional a, Arbitrary a) => a -> a -> Property
+prop_expNonZero :: (Show a, Fractional a, RealFloat a, Arbitrary a) => a -> a -> Property
 prop_expNonZero base exponent =
   ( base /= 0
       && exponent /= 0
@@ -285,15 +289,9 @@ prop_exactAddition =
       c = to (3 % 10 :: Rational)
    in fromMaybe True (a ⊕ b =~ c)
 
--- Floating point precision issues
-prop_floatingPointAddition :: Bool
-prop_floatingPointAddition =
-  maybe False not ((to 0.1 ⊕ to 0.2) =~ to 0.3)
-
--- Precision loss in large numbers
-prop_precisionLoss :: Bool
-prop_precisionLoss =
-  maybe False not ((to 1e15 ⊕ to 1 ⊖ to 1e15) =~ to 1)
+prop_precision :: Bool
+prop_precision =
+  (to (1 % 3) ⊕ to (1 % 3) ⊕ to (1 % 3)) == to 1
 
 -- Error propagation - operations after division by zero
 prop_errorPropagation :: Bool
@@ -372,11 +370,8 @@ test = do
   putStrLn "prop_exactAddition"
   quickCheck prop_exactAddition
 
-  putStrLn "prop_floatingPointAddition"
-  quickCheck prop_floatingPointAddition
-
-  putStrLn "prop_precisionLoss"
-  quickCheck prop_precisionLoss
+  putStrLn "prop_precision"
+  quickCheck prop_precision
   putStrLn "prop_errorPropagation"
   quickCheck prop_errorPropagation
   putStrLn "prop_sqrtNegative"
