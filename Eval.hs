@@ -68,14 +68,14 @@ evalExpr env expr = case expr of
         evalExpr pipeEnv e2
 
 -- Apply binary operations using Ops.hs operations
-applyBinOp :: Op -> Cell Double -> Cell Double -> Cell Double
+applyBinOp :: Op -> Cell -> Cell -> Cell
 applyBinOp Add = (⊕)
 applyBinOp Sub = (⊖)
 applyBinOp Mul = (⊗)
 applyBinOp Div = (⊘)
 
 -- Apply unary operations using Ops.hs operations
-applyUnaryOp :: UnaryOp -> Cell Double -> Cell Double
+applyUnaryOp :: UnaryOp -> Cell -> Cell
 applyUnaryOp Neg = negate'
 applyUnaryOp Sqrt = sqrt'
 applyUnaryOp Abs = abs'
