@@ -27,74 +27,6 @@ data Operation = Operation
     inputs :: [Operation]
   }
 
--- Check if an integer has an exact integer nth root
-exactIntegerRoot :: Integer -> Integer -> Maybe Integer
-exactIntegerRoot base n
-  | n <= 0 = Nothing
-  | base < 0 && even n = Nothing -- Negative base with even root
-  | base < 0 = fmap negate $ exactIntegerRoot (negate base) n
-  | base == 0 = Just 0
-  | base == 1 = Just 1
-  | otherwise =
-      -- Try a direct computation first
-      let root = floor $ fromInteger base ** (1 / fromInteger n)
-       in if root ^ n == base
-            then Just root
-            else Nothing -- Not a perfect power
-
--- Calculate exact roots where possible
-exactRoot :: ComplexRational -> Int -> Maybe ComplexRational
-exactRoot (CR r 0) n
-  | r >= 0 =
-      -- Perfect integer root
-      let rootR = toRational (fromRational r ** (1 / fromIntegral n :: Double))
-          -- Check if this is exact by raising back to power
-          checkPower = rootR ^ n
-       in if checkPower == r
-            then Just (CR rootR 0)
-            else complexRoot (CR r 0) n
--- For negative reals, exact roots may have imaginary parts
-exactRoot (CR r 0) n
-  | r < 0 && odd n =
-      Just (CR (negate (toRational ((-fromRational r) ** (1 / fromIntegral n :: Double)))) 0)
--- For other cases, use complex root calculation
-exactRoot z n = complexRoot z n
-
--- Proper complex root calculation
-complexRoot :: ComplexRational -> Int -> Maybe ComplexRational
-complexRoot (CR a b) n =
-  -- For pure real numbers, can do direct calculation
-  if b == 0
-    then
-      let rootVal = fromRational a ** (1 / fromIntegral n :: Double)
-       in if isNaN rootVal || isInfinite rootVal
-            then Nothing
-            else Just (CR (toRational rootVal) 0)
-    else -- For complex numbers, convert to polar form
-
-      let aD = fromRational a
-          bD = fromRational b
-          -- r = magnitude, theta = argument
-          r = sqrt (aD * aD + bD * bD)
-          theta = atan2 bD aD
-          -- nth root in polar form: r^(1/n) * e^(i*theta/n)
-          rootR = r ** (1 / fromIntegral n)
-          newTheta = theta / fromIntegral n
-          -- Convert back to Cartesian
-          newReal = rootR * cos newTheta
-          newImag = rootR * sin newTheta
-       in if isNaN newReal || isNaN newImag
-            then Nothing
-            else Just (CR (toRational newReal) (toRational newImag))
-
--- Helper for integer powers
-intPowCR :: ComplexRational -> Int -> ComplexRational
-intPowCR _ 0 = CR 1 0
-intPowCR z 1 = z
-intPowCR z n
-  | even n = let half = intPowCR z (n `div` 2) in mulCR half half
-  | otherwise = mulCR z (intPowCR z (n - 1))
-
 --
 ---'Fat' Ops
 
@@ -200,6 +132,12 @@ from (Cell op) = case op.result of
   Just (CR _ _) -> Left "Error: complex result"
   Nothing -> Left "Error: divide by zero or 0 ^ 0"
 
+-----------------------------------------
+-----------------------------------------
+-----------------------------------------
+-----------------------------------------
+-----------------------------------------
+-----------------------------------------
 -----------------------------------------
 
 -- 'test 1'
