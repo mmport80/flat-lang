@@ -3,7 +3,7 @@
 
 module Ops (Cell, abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘), sqrtCR) where
 
-import ComplexRational (ComplexRational (..), addCR, divCR, magnitudeCR, maybePowCR, mulCR, sqrtCR, subCR, toComplexDouble)
+import ComplexRational (ComplexRational (..), addCR, divCR, magnitudeCR, maybePowCR, mulCR, sqrtCR, subCR)
 import Control.Applicative (liftA2)
 import Control.Monad (guard)
 import Data.Either (isLeft, isRight)

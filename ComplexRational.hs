@@ -5,11 +5,7 @@ module ComplexRational
     mulCR,
     divCR,
     sqrtCR,
-    powCR,
-    intPowCR,
     magnitudeCR,
-    toComplexDouble,
-    fromComplexDouble,
     maybePowCR,
   )
 where
