@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Ops (Cell, abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘)) where
+module Ops (Cell, abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘), sqrtCR) where
 
+import ComplexRational (ComplexRational (..), addCR, divCR, magnitudeCR, maybePowCR, mulCR, sqrtCR, subCR, toComplexDouble)
 import Control.Applicative (liftA2)
 import Control.Monad (guard)
-import Data.Complex (Complex ((:+)), imagPart, magnitude, mkPolar, polar, realPart)
 import Data.Either (isLeft, isRight)
 import Data.Function (on, (&))
 import Data.Maybe (fromMaybe, isNothing)
@@ -17,9 +17,6 @@ import Test.QuickCheck (Arbitrary, Property, quickCheck, (==>))
 
 -----------------------------------------
 
-data ComplexRational = CR Rational Rational -- real and imaginary parts
-  deriving (Eq, Show)
-
 newtype Cell = Cell
   {operation :: Operation}
 
@@ -29,56 +26,6 @@ data Operation = Operation
     result :: Maybe ComplexRational,
     inputs :: [Operation]
   }
-
--- Implement arithmetic operations
-addCR :: ComplexRational -> ComplexRational -> ComplexRational
-addCR (CR r1 i1) (CR r2 i2) = CR (r1 + r2) (i1 + i2)
-
-subCR :: ComplexRational -> ComplexRational -> ComplexRational
-subCR (CR r1 i1) (CR r2 i2) = CR (r1 - r2) (i1 - i2)
-
-divCR :: ComplexRational -> ComplexRational -> Maybe ComplexRational
-divCR _ (CR 0 0) = Nothing
-divCR (CR r1 i1) (CR r2 i2) =
-  let d = r2 * r2 + i2 * i2
-   in if d == 0
-        then Nothing
-        else Just $ CR ((r1 * r2 + i1 * i2) / d) ((i1 * r2 - r1 * i2) / d)
-
-mulCR :: ComplexRational -> ComplexRational -> ComplexRational
-mulCR (CR r1 i1) (CR r2 i2) = CR (r1 * r2 - i1 * i2) (r1 * i2 + i1 * r2)
-
-powCR :: ComplexRational -> ComplexRational -> Maybe ComplexRational
-powCR (CR 0 0) (CR 0 0) = Nothing -- 0^0 = Nothing (undefined)
-powCR (CR 0 0) _ = Just (CR 0 0) -- 0^n = 0 for n ≠ 0
-powCR (CR 0 i) _ | i /= 0 = Nothing -- (0+i)^n is undefined in our implementation
-
--- CASE 1: Integer exponents - use exact rational arithmetic
-powCR base (CR exp 0)
-  | denominator exp == 1 =
-      let n = numerator exp
-       in if n >= 0
-            then Just $ intPowCR base (fromIntegral n)
-            else divCR (CR 1 0) (intPowCR base (fromIntegral (-n)))
--- CASE 2: Integer base, simple roots (1/n) - check for exact integer roots
-powCR (CR base 0) (CR exp 0)
-  | denominator base == 1 && numerator exp == 1 =
-      let baseInt = numerator base
-          rootN = denominator exp
-       in case exactIntegerRoot baseInt rootN of
-            Just root -> Just $ CR (fromInteger root) 0
-            Nothing -> directPowCR (CR (toRational base) 0) (CR exp 0)
--- CASE 3: Simple rational base, simple roots - check for exact rational roots
-powCR (CR a 0) (CR b 0)
-  | numerator b == 1 =
-      let n = denominator b
-          numRoot = exactIntegerRoot (numerator a) n
-          denRoot = exactIntegerRoot (denominator a) n
-       in case (numRoot, denRoot) of
-            (Just numR, Just denR) -> Just $ CR (fromInteger numR % fromInteger denR) 0
-            _ -> directPowCR (CR a 0) (CR b 0)
--- CASE 4: All other cases - use floating point approximation
-powCR base exp = directPowCR base exp
 
 -- Check if an integer has an exact integer nth root
 exactIntegerRoot :: Integer -> Integer -> Maybe Integer
@@ -94,27 +41,6 @@ exactIntegerRoot base n
        in if root ^ n == base
             then Just root
             else Nothing -- Not a perfect power
-
--- Direct floating-point calculation for when exact methods aren't possible
-directPowCR :: ComplexRational -> ComplexRational -> Maybe ComplexRational
-directPowCR base exp =
-  let baseD = toComplexDouble base
-      expD = toComplexDouble exp
-      resultD = baseD ** expD
-   in if isNaN (realPart resultD)
-        || isNaN (imagPart resultD)
-        || isInfinite (realPart resultD)
-        || isInfinite (imagPart resultD)
-        then Nothing
-        else Just (fromComplexDouble resultD)
-
--- Helper to convert to Complex Double for computation
-toComplexDouble :: ComplexRational -> Complex Double
-toComplexDouble (CR a b) = (fromRational a :+ fromRational b)
-
--- Helper to convert from Complex Double back to ComplexRational
-fromComplexDouble :: Complex Double -> ComplexRational
-fromComplexDouble (a :+ b) = CR (toRational a) (toRational b)
 
 -- Calculate exact roots where possible
 exactRoot :: ComplexRational -> Int -> Maybe ComplexRational
@@ -204,22 +130,8 @@ infixl 7 ⊘
 (⊘) :: Cell -> Cell -> Cell
 (⊘) = liftCell (\ma mb -> ma >>= \a -> mb >>= \b -> divCR a b) "divide"
 
-sqrtCR :: ComplexRational -> Maybe ComplexRational
-sqrtCR (CR 0 0) = Just (CR 0 0)
-sqrtCR (CR r i) =
-  let mag = sqrt (fromRational r * fromRational r + fromRational i * fromRational i)
-      theta = atan2 (fromRational i) (fromRational r)
-      newR = toRational (mag * cos (theta / 2))
-      newI = toRational (mag * sin (theta / 2))
-   in Just (CR newR newI)
-
 sqrt' :: Cell -> Cell
 sqrt' = liftCellUnary (>>= sqrtCR) "sqrt"
-
-maybePowCR :: Maybe ComplexRational -> Maybe ComplexRational -> Maybe ComplexRational
-maybePowCR Nothing _ = Nothing
-maybePowCR _ Nothing = Nothing
-maybePowCR (Just a) (Just b) = powCR a b
 
 (⊗⊗) :: Cell -> Cell -> Cell
 (⊗⊗) = liftCell maybePowCR "exponent"
@@ -229,13 +141,6 @@ exp' = (⊗⊗) (to (exp 1))
 
 sq :: Cell -> Cell
 sq a = a ⊗ a
-
--- This returns a maybe Bool because we are never sure whether the Cells have a valid number of course..
--- TODO: only worries about real part, should use magnitude instead
--- Define magnitude for ComplexRational (approximated)
-magnitudeCR :: ComplexRational -> Rational
-magnitudeCR (CR r i) =
-  toRational (sqrt (fromRational (r * r + i * i) :: Double))
 
 -- Update comparison operators
 infix 4 ≪
@@ -251,23 +156,6 @@ infix 4 ≫
 -- Update absolute value
 abs' :: Cell -> Cell
 abs' = liftCellUnary (fmap (\cr -> CR (magnitudeCR cr) 0)) "abs"
-
-instance Num ComplexRational where
-  (CR r1 i1) + (CR r2 i2) = CR (r1 + r2) (i1 + i2)
-  (CR r1 i1) - (CR r2 i2) = CR (r1 - r2) (i1 - i2)
-  (CR r1 i1) * (CR r2 i2) = CR (r1 * r2 - i1 * i2) (r1 * i2 + i1 * r2)
-  negate (CR r i) = CR (negate r) (negate i)
-  abs z@(CR r i) =
-    let magDouble = sqrt (fromRational r * fromRational r + fromRational i * fromRational i)
-     in CR (toRational magDouble) 0
-  signum z@(CR r i) =
-    if r == 0 && i == 0
-      then CR 0 0
-      else
-        let magDouble = sqrt (fromRational r * fromRational r + fromRational i * fromRational i)
-            magnitude = toRational magDouble
-         in CR (r / magnitude) (i / magnitude)
-  fromInteger n = CR (fromInteger n) 0
 
 negate' :: Cell -> Cell
 negate' = liftCellUnary (fmap negate) "negate"
