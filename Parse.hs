@@ -6,13 +6,16 @@ module Parse
     TopLevel (..),
     Op (..),
     UnaryOp (..),
-    runParserTests,
+    test,
   )
 where
 
+import ComplexRational (ComplexRational (CR))
 import Control.Monad (void)
+import Data.Char
 import Data.Complex (Complex (..))
 import Data.Functor (void, ($>))
+import Data.Ratio ((%))
 import Data.Void (Void)
 import Test.QuickCheck
   ( Arbitrary (arbitrary),
@@ -25,7 +28,7 @@ import Test.QuickCheck
     vectorOf,
     (==>),
   )
-import Text.Megaparsec (MonadParsec (eof, try), ParseErrorBundle, Parsec, between, choice, many, option, parse, sepEndBy1, some, (<|>))
+import Text.Megaparsec (MonadParsec (eof, try), ParseErrorBundle, Parsec, between, choice, many, option, parse, satisfy, sepEndBy1, some, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 
@@ -50,16 +53,44 @@ identifier = lexeme $ do
   rest <- many alphaNumChar
   pure (first : rest)
 
-number :: Parser (Complex Double)
+-- Parse a proper rational number (with decimal point)
+rationalParser :: Parser Rational
+rationalParser = do
+  intPart <- L.decimal
+  _ <- char '.'
+  fractionalStr <- some (satisfy isDigit)
+  let fractionalPart = read fractionalStr :: Integer
+  let denominator = 10 ^ length fractionalStr
+
+  -- Combine integer and fractional parts
+  return $ (intPart % 1) + (fractionalPart % denominator)
+
+integerAsRationalParser :: Parser Rational
+integerAsRationalParser = do
+  n <- L.decimal
+  return $ n % 1
+
+-- Parse a number as ComplexRational
+number :: Parser ComplexRational
+number = lexeme $ do
+  sign <- option 1 (-1 <$ char '-') -- Parse optional minus sign
+
+  -- Parse the number as rational
+  n <- try rationalParser <|> integerAsRationalParser
+
+  -- Return a ComplexRational with zero imaginary part
+  pure $ CR (sign * n) 0
+
+{- number :: Parser (Complex Double)
 number = lexeme $ do
   sign <- option 1 (-1 <$ char '-') -- Parse optional minus sign
   n <- try L.float <|> fromIntegral <$> L.decimal
   pure (sign * n :+ 0)
-
+ -}
 data Expr
   = BinOp Op Expr Expr
   | UnOp UnaryOp Expr
-  | Lit (Complex Double)
+  | Lit ComplexRational
   | Ref String
   | Pipeline Expr Expr
   deriving (Show, Eq)
@@ -89,7 +120,7 @@ pipelineOp =
           <|> (Mul <$ symbol "*")
           <|> (Div <$ symbol "/")
       -- Return a binary operation with a placeholder for the right operand
-      pure $ BinOp op (Lit val) (Lit (0 :+ 0))
+      pure $ BinOp op (Lit val) (Lit (CR 0 0))
 
     postfixBinaryOp = try postfixWithNegative <|> postfixNormal
       where
@@ -99,21 +130,21 @@ pipelineOp =
           n <- try L.float <|> fromIntegral <$> L.decimal
           _ <- sc -- handle whitespace before operator
           op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
-          pure $ BinOp op (Lit ((-n) :+ 0)) (Lit (0 :+ 0))
+          pure $ BinOp op (Lit (CR (toRational (-n)) 0)) (Lit (CR 0 0))
 
         postfixNormal = do
           n <- number
           op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
-          pure $ BinOp op (Lit n) (Lit (0 :+ 0))
+          pure $ BinOp op (Lit n) (Lit (CR 0 0))
 
     prefixBinaryOp = do
       op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
-      BinOp op (Lit (0 :+ 0)) . Lit <$> number
+      BinOp op (Lit (CR 0 0)) . Lit <$> number
 
     unaryPipeOp =
       choice
-        [ UnOp Sqrt <$> (symbol "sqrt" $> Lit (0 :+ 0)),
-          UnOp Abs <$> (symbol "abs" $> Lit (0 :+ 0))
+        [ UnOp Sqrt <$> (symbol "sqrt" $> Lit (CR 0 0)),
+          UnOp Abs <$> (symbol "abs" $> Lit (CR 0 0))
         ]
 
 expr :: Parser Expr
@@ -126,11 +157,11 @@ expr = do
   where
     -- Replace placeholder zeros with the piped value
     makePipeline :: Expr -> Expr -> Expr
-    makePipeline pipedVal (BinOp op (Lit (0 :+ 0)) right) =
+    makePipeline pipedVal (BinOp op (Lit (CR 0 0)) right) =
       BinOp op pipedVal right
-    makePipeline pipedVal (BinOp op left (Lit (0 :+ 0))) =
+    makePipeline pipedVal (BinOp op left (Lit (CR 0 0))) =
       BinOp op left pipedVal
-    makePipeline pipedVal (UnOp uop (Lit (0 :+ 0))) =
+    makePipeline pipedVal (UnOp uop (Lit (CR 0 0))) =
       UnOp uop pipedVal
     makePipeline pipedVal expr =
       Pipeline pipedVal expr
@@ -254,8 +285,8 @@ makeAssignment :: String -> String -> String
 makeAssignment name expr = name ++ " = " ++ expr
 
 -- Main property test function
-runParserTests :: IO ()
-runParserTests = do
+test :: IO ()
+test = do
   putStrLn "Testing pipeline division equivalence..."
   quickCheck prop_pipelineDivEquiv
   putStrLn "Testing pipeline postfix division equivalence..."
