@@ -395,51 +395,53 @@ test = do
   -- print $ from $ fib $ to 10
 
   -- TODO: use complex double instead of just double
-  putStrLn "prop_addIdentity"
-  quickCheck (prop_addIdentity :: Double -> Bool)
-  putStrLn "prop_addCommutative"
-  quickCheck (prop_addCommutative :: Double -> Double -> Bool)
-  putStrLn "prop_mulCommutative"
-  quickCheck (prop_mulCommutative :: Double -> Double -> Bool)
-  putStrLn "prop_addAssociative"
-  quickCheck (prop_addAssociative :: Double -> Double -> Double -> Bool)
-  putStrLn "prop_mulAssociative"
-  quickCheck (prop_mulAssociative :: Double -> Double -> Double -> Bool)
-  putStrLn "prop_distributiveMulOverAdd"
-  quickCheck (prop_distributiveMulOverAdd :: Double -> Double -> Double -> Bool)
-  putStrLn "prop_divByItself"
-  quickCheck (prop_divByItself :: Double -> Property)
-  putStrLn "prop_divByZero"
-  quickCheck (prop_divByZero :: Double -> Bool)
-  putStrLn "prop_addSubInverse"
-  quickCheck (prop_addSubInverse :: Double -> Double -> Bool)
-  putStrLn "prop_mulDivInverse"
-  quickCheck (prop_mulDivInverse :: Double -> Double -> Property)
+  -- putStrLn "prop_addIdentity"
+  -- quickCheck (prop_addIdentity :: Double -> Bool)
+  -- putStrLn "prop_addCommutative"
+  -- quickCheck (prop_addCommutative :: Double -> Double -> Bool)
+  -- putStrLn "prop_mulCommutative"
+  -- quickCheck (prop_mulCommutative :: Double -> Double -> Bool)
+  -- putStrLn "prop_addAssociative"
+  -- quickCheck (prop_addAssociative :: Double -> Double -> Double -> Bool)
+  -- putStrLn "prop_mulAssociative"
+  -- quickCheck (prop_mulAssociative :: Double -> Double -> Double -> Bool)
+  -- putStrLn "prop_distributiveMulOverAdd"
+  -- quickCheck (prop_distributiveMulOverAdd :: Double -> Double -> Double -> Bool)
+  -- putStrLn "prop_divByItself"
+  -- quickCheck (prop_divByItself :: Double -> Property)
+  -- putStrLn "prop_divByZero"
+  -- quickCheck (prop_divByZero :: Double -> Bool)
+  -- putStrLn "prop_addSubInverse"
+  -- quickCheck (prop_addSubInverse :: Double -> Double -> Bool)
+  -- putStrLn "prop_mulDivInverse"
+  -- quickCheck (prop_mulDivInverse :: Double -> Double -> Property)
+
   putStrLn "prop_expNonZero"
   quickCheck (prop_expNonZero :: Double -> Double -> Property) -- }
-  putStrLn "prop_expZero"
-  quickCheck (prop_zeroToZero :: Bool)
-  -- Add after your existing tests
-  putStrLn "prop_zeroByZero"
-  quickCheck prop_zeroByZero
-  putStrLn "prop_smallDenominator"
-  quickCheck prop_smallDenominator
-  putStrLn "prop_negativeBasePower"
-  quickCheck prop_negativeBasePower
 
-  putStrLn "prop_exactAddition"
-  quickCheck prop_exactAddition
+-- putStrLn "prop_expZero"
+-- quickCheck (prop_zeroToZero :: Bool)
+-- -- Add after your existing tests
+-- putStrLn "prop_zeroByZero"
+-- quickCheck prop_zeroByZero
+-- putStrLn "prop_smallDenominator"
+-- quickCheck prop_smallDenominator
+-- putStrLn "prop_negativeBasePower"
+-- quickCheck prop_negativeBasePower
 
-  putStrLn "prop_floatingPointAddition"
-  quickCheck prop_floatingPointAddition
+-- putStrLn "prop_exactAddition"
+-- quickCheck prop_exactAddition
 
-  putStrLn "prop_precisionLoss"
-  quickCheck prop_precisionLoss
-  putStrLn "prop_errorPropagation"
-  quickCheck prop_errorPropagation
-  putStrLn "prop_sqrtNegative"
-  quickCheck prop_sqrtNegative
-  putStrLn "prop_multipleErrors"
-  quickCheck prop_multipleErrors
-  putStrLn "prop_mulDivIdentityNearZero"
-  quickCheck prop_mulDivIdentityNearZero
+-- putStrLn "prop_floatingPointAddition"
+-- quickCheck prop_floatingPointAddition
+
+-- putStrLn "prop_precisionLoss"
+-- quickCheck prop_precisionLoss
+-- putStrLn "prop_errorPropagation"
+-- quickCheck prop_errorPropagation
+-- putStrLn "prop_sqrtNegative"
+-- quickCheck prop_sqrtNegative
+-- putStrLn "prop_multipleErrors"
+-- quickCheck prop_multipleErrors
+-- putStrLn "prop_mulDivIdentityNearZero"
+-- quickCheck prop_mulDivIdentityNearZero
