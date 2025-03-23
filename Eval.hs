@@ -6,10 +6,10 @@ module Eval
   )
 where
 
-import Data.Complex (Complex ((:+)), realPart)
+import ComplexRational (ComplexRational (CR))
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Ops (Cell (..), abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘))
+import Ops (Cell (..), Operation (..), abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘))
 import Parse (Expr (..), Op (..), TopLevel (..), UnaryOp (..))
 
 -- Type aliases for clarity
@@ -31,7 +31,7 @@ evalProgram = foldl evalDef (Right Map.empty)
 evalExpr :: EvalEnv -> Expr -> EvalResult
 evalExpr env expr = case expr of
   -- Handle literal values (convert to Cell)
-  Lit val -> Right $ to (realPart val)
+  Lit cr -> Right $ Cell (Operation "constant" (Just cr) [])
   -- Look up variable references
   Ref name -> case Map.lookup name env of
     Just value -> Right value
@@ -52,14 +52,14 @@ evalExpr env expr = case expr of
     v1 <- evalExpr env e1
     case e2 of
       -- If right side is binary op with placeholder zero, replace with v1
-      BinOp op (Lit (0 :+ 0)) right -> do
+      BinOp op (Lit (CR 0 0)) right -> do
         rightVal <- evalExpr env right
         Right $ applyBinOp op v1 rightVal
-      BinOp op left (Lit (0 :+ 0)) -> do
+      BinOp op left (Lit (CR 0 0)) -> do
         leftVal <- evalExpr env left
         Right $ applyBinOp op leftVal v1
       -- If right side is unary op with placeholder zero, apply to v1
-      UnOp uop (Lit (0 :+ 0)) ->
+      UnOp uop (Lit (CR 0 0)) ->
         Right $ applyUnaryOp uop v1
       -- Otherwise treat as function application
       _ -> do

@@ -12,7 +12,7 @@ where
 
 import ComplexRational (ComplexRational (CR))
 import Control.Monad (void)
-import Data.Char
+import Data.Char (isDigit)
 import Data.Complex (Complex (..))
 import Data.Functor (void, ($>))
 import Data.Ratio ((%))
@@ -28,7 +28,7 @@ import Test.QuickCheck
     vectorOf,
     (==>),
   )
-import Text.Megaparsec (MonadParsec (eof, try), ParseErrorBundle, Parsec, between, choice, many, option, parse, satisfy, sepEndBy1, some, (<|>))
+import Text.Megaparsec (MonadParsec (eof, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 
@@ -76,17 +76,25 @@ number = lexeme $ do
   sign <- option 1 (-1 <$ char '-') -- Parse optional minus sign
 
   -- Parse the number as rational
-  n <- try rationalParser <|> integerAsRationalParser
+  n <- try scientificParser <|> try rationalParser <|> integerAsRationalParser
 
   -- Return a ComplexRational with zero imaginary part
   pure $ CR (sign * n) 0
 
-{- number :: Parser (Complex Double)
-number = lexeme $ do
-  sign <- option 1 (-1 <$ char '-') -- Parse optional minus sign
-  n <- try L.float <|> fromIntegral <$> L.decimal
-  pure (sign * n :+ 0)
- -}
+scientificParser :: Parser Rational
+scientificParser = do
+  -- Parse the base number (either decimal or integer)
+  base <- try rationalParser <|> integerAsRationalParser
+
+  -- Parse the exponent part
+  _ <- char 'e' <|> char 'E'
+  expSign <- option 1 (-1 <$ char '-') <|> (1 <$ optional (char '+'))
+  expVal <- L.decimal
+
+  -- Calculate the result: base * 10^exp
+  let exp = expSign * expVal
+  return $ base * (10 ^^ exp)
+
 data Expr
   = BinOp Op Expr Expr
   | UnOp UnaryOp Expr
