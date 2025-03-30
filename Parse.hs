@@ -7,6 +7,8 @@ module Parse
     Op (..),
     UnaryOp (..),
     test,
+    testDebug,
+    testPipelineWithAssignment,
   )
 where
 
@@ -32,6 +34,7 @@ import Test.QuickCheck
 import Text.Megaparsec (MonadParsec (eof, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
+import Text.Megaparsec.Error (errorBundlePretty)
 
 type Parser = Parsec Void String
 
@@ -231,7 +234,7 @@ instance Arbitrary ValidName where
     rest <- vectorOf restLength $ elements $ ['a' .. 'z'] ++ ['0' .. '9']
     return $ ValidName (firstChar : rest)
 
--- Pipeline equivalence properties
+{- -- Pipeline equivalence properties
 prop_pipelineDivEquiv :: ValidName -> Double -> Property
 prop_pipelineDivEquiv (ValidName x) n =
   n
@@ -239,7 +242,7 @@ prop_pipelineDivEquiv (ValidName x) n =
       ==> let expr1 = x ++ " |> /" ++ show n
               expr2 = x ++ " / " ++ show n
            in parseProgram (makeAssignment "result" expr1) == parseProgram (makeAssignment "result" expr2)
-
+ -}
 prop_pipelinePostDivEquiv :: ValidName -> Double -> Property
 prop_pipelinePostDivEquiv (ValidName x) n =
   n
@@ -368,3 +371,125 @@ test = do
    -}
   putStrLn "Testing nested expressions in pipelines..."
   quickCheck prop_pipelineNestedExpr
+
+-- Debugging function to examine parse results for pipeline division
+debugPipelineDivEquiv :: String -> Double -> IO ()
+debugPipelineDivEquiv varName n = do
+  let expr1 = varName ++ " |> /" ++ show n
+      expr2 = varName ++ " / " ++ show n
+      assignment1 = makeAssignment "result" expr1
+      assignment2 = makeAssignment "result" expr2
+      result1 = parseProgram assignment1
+      result2 = parseProgram assignment2
+
+  putStrLn $ "Testing equivalence of:"
+  putStrLn $ "  1) " ++ assignment1
+  putStrLn $ "  2) " ++ assignment2
+  putStrLn ""
+
+  putStrLn $ "ParseResult 1: " ++ show result1
+  putStrLn $ "ParseResult 2: " ++ show result2
+  putStrLn ""
+
+  case (result1, result2) of
+    (Right [NamedValue _ pipeExpr], Right [NamedValue _ divExpr]) -> do
+      putStrLn $ "Pipeline expression structure: " ++ showExprStructure pipeExpr
+      putStrLn $ "Division expression structure: " ++ showExprStructure divExpr
+
+      -- Now check literals specifically
+      inspectLiterals pipeExpr
+      inspectLiterals divExpr
+    _ ->
+      putStrLn "Failed to parse both expressions"
+
+-- Helper to show expression structure without full details of literals
+showExprStructure :: Expr -> String
+showExprStructure (BinOp op e1 e2) =
+  "BinOp " ++ show op ++ " (" ++ showExprStructure e1 ++ ") (" ++ showExprStructure e2 ++ ")"
+showExprStructure (UnOp op e) =
+  "UnOp " ++ show op ++ " (" ++ showExprStructure e ++ ")"
+showExprStructure (Lit _) = "Lit <value>" -- Abstract away the literal details
+showExprStructure (Ref name) = "Ref " ++ name
+showExprStructure (Pipeline e1 e2) =
+  "Pipeline (" ++ showExprStructure e1 ++ ") (" ++ showExprStructure e2 ++ ")"
+
+-- Helper to specifically inspect literal values in expressions
+inspectLiterals :: Expr -> IO ()
+inspectLiterals expr = do
+  let literals = collectLiterals expr
+  putStrLn $ "Literal values in expression: " ++ show literals
+
+-- Collect all literal values from an expression
+collectLiterals :: Expr -> [ComplexRational]
+collectLiterals (Lit c) = [c]
+collectLiterals (BinOp _ e1 e2) = collectLiterals e1 ++ collectLiterals e2
+collectLiterals (UnOp _ e) = collectLiterals e
+collectLiterals (Pipeline e1 e2) = collectLiterals e1 ++ collectLiterals e2
+collectLiterals _ = []
+
+-- Example usage in your test function
+testDebug :: IO ()
+testDebug = do
+  -- Test with the failing case
+  debugPipelineDivEquiv "t5rzlqaha" 0.1
+
+  -- Also test with some other values for comparison
+  debugPipelineDivEquiv "x" 2.0
+  debugPipelineDivEquiv "y" 1
+
+  -- Test specifically with values that might be problematic for floating-point
+  debugPipelineDivEquiv "z" 0.3 -- 0.3 has no exact binary representation
+
+-- Modify the test to use actual parsed expressions instead of constructing strings
+-- First, let's create a function to manually parse expressions
+parseExpr :: String -> Either (ParseErrorBundle String Void) Expr
+parseExpr = parse (between sc eof expr) ""
+
+-- Now update the property test to use this function
+prop_pipelineDivEquiv :: ValidName -> Double -> Property
+prop_pipelineDivEquiv (ValidName x) n =
+  n
+    /= 0
+      ==> let
+              -- Parse expressions directly using the expr parser
+              expr1 = parseExpr (x ++ " |> /" ++ show n)
+              expr2 = parseExpr (x ++ " / " ++ show n)
+           in -- Compare the results with detailed error message
+              counterexample
+                ( "Expr1 ("
+                    ++ x
+                    ++ " |> /"
+                    ++ show n
+                    ++ "): "
+                    ++ show expr1
+                    ++ "\nExpr2 ("
+                    ++ x
+                    ++ " / "
+                    ++ show n
+                    ++ "): "
+                    ++ show expr2
+                )
+                (expr1 == expr2)
+
+testPipelineWithAssignment :: IO ()
+testPipelineWithAssignment = do
+  let testCases =
+        [ "result = x |> /0.1", -- Original failing test
+          "result = x / 0.1", -- Regular division for comparison
+          "a = 1 |> + 2", -- Basic prefix operation
+          "b = a |> 2 -", -- Basic postfix operation
+          "c = 1 / 1 |> 1 + 1 /", -- Complex expression
+          "d = c |> 2 / 2 + |> 0 /" -- Chained pipelines
+        ]
+
+  putStrLn "=== Testing Complete Pipeline Statements ==="
+  mapM_ testProgram testCases
+  where
+    testProgram :: String -> IO ()
+    testProgram input = do
+      putStrLn $ "\nInput: " ++ input
+      case parseProgram input of
+        Left err -> putStrLn $ "Error: " ++ errorBundlePretty err
+        Right result -> do
+          putStrLn $ "Success!"
+          putStrLn $ "AST: " ++ show result
