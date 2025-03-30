@@ -113,46 +113,57 @@ data Op = Add | Sub | Mul | Div
 data UnaryOp = Neg | Sqrt | Abs | OpAsCombinator Op
   deriving (Show, Eq)
 
+-- Updated pipelineOp parser to handle all cases
 pipelineOp :: Parser Expr
 pipelineOp =
   choice
-    [ try incompleteOp,
-      try prefixBinaryOp, -- /2 means x/2
-      try postfixBinaryOp, -- 2/ means 2/x
-      try unaryPipeOp, -- sqrt means sqrt x
-      addExpr -- fallback to normal expression
+    [ try prefixBinaryOp, -- Like /2 meaning x/2
+      try postfixBinaryOp, -- Like 2/ meaning 2/x
+      try unaryPipeOp, -- Like sqrt meaning sqrt x
+      try incompleteOp, -- Like +2 meaning x+2
+      addExpr -- Default to normal expressions
     ]
   where
     -- Handle incomplete binary operations
     incompleteOp = do
-      val <- try number
       op <-
-        (Add <$ symbol "+")
-          <|> (Sub <$ symbol "-")
-          <|> (Mul <$ symbol "*")
-          <|> (Div <$ symbol "/")
-      -- Return a binary operation with a placeholder for the right operand
+        choice
+          [ Add <$ symbol "+",
+            Sub <$ symbol "-",
+            Mul <$ symbol "*",
+            Div <$ symbol "/"
+          ]
+      expr <- addExpr
+      -- Return a binary operation with a placeholder for the left operand
+      pure $ BinOp op (Lit (CR 0 0)) expr
+
+    -- Postfix operator (e.g., "2/")
+    postfixBinaryOp = do
+      val <- number
+      op <-
+        choice
+          [ Div <$ symbol "/",
+            Mul <$ symbol "*",
+            Add <$ symbol "+",
+            Sub <$ symbol "-"
+          ]
+      -- Return binary op with placeholder for right side
       pure $ BinOp op (Lit val) (Lit (CR 0 0))
 
-    postfixBinaryOp = try postfixWithNegative <|> postfixNormal
-      where
-        postfixWithNegative = do
-          _ <- char '-'
-          _ <- sc -- handle whitespace after minus sign
-          n <- try L.float <|> fromIntegral <$> L.decimal
-          _ <- sc -- handle whitespace before operator
-          op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
-          pure $ BinOp op (Lit (CR (toRational (-n)) 0)) (Lit (CR 0 0))
-
-        postfixNormal = do
-          n <- number
-          op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
-          pure $ BinOp op (Lit n) (Lit (CR 0 0))
-
+    -- Prefix operator (e.g., "/2")
     prefixBinaryOp = do
-      op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
-      BinOp op (Lit (CR 0 0)) . Lit <$> number
+      op <-
+        choice
+          [ Div <$ symbol "/",
+            Mul <$ symbol "*",
+            Add <$ symbol "+",
+            Sub <$ symbol "-"
+          ]
+      val <- number
+      -- Return binary op with placeholder for left side
+      pure $ BinOp op (Lit (CR 0 0)) (Lit val)
 
+    -- Unary operators like sqrt or abs
     unaryPipeOp =
       choice
         [ UnOp Sqrt <$> (symbol "sqrt" $> Lit (CR 0 0)),
