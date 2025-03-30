@@ -170,13 +170,21 @@ pipelineOp =
           UnOp Abs <$> (symbol "abs" $> Lit (CR 0 0))
         ]
 
+-- Modified version of the expr parser to fix pipeline issues
 expr :: Parser Expr
-expr = do
+expr = pipelineExpr
+
+-- New parser that specifically handles pipeline expressions
+pipelineExpr :: Parser Expr
+pipelineExpr = do
   initial <- addExpr
-  rest <- many $ try $ do
+  option initial $ do
     _ <- symbol "|>"
-    addExpr
-  pure $ foldl makePipeline initial rest
+    op <- pipelineOp
+    rest <- option op $ do
+      _ <- symbol "|>"
+      pipelineExpr
+    pure $ makePipeline initial (if rest == op then op else Pipeline op rest)
   where
     -- Replace placeholder zeros with the piped value
     makePipeline :: Expr -> Expr -> Expr
@@ -188,6 +196,18 @@ expr = do
       UnOp uop pipedVal
     makePipeline pipedVal expr =
       Pipeline pipedVal expr
+
+-- Fixed prefixBinaryOp parser for pipeline operations
+prefixBinaryOp :: Parser Expr
+prefixBinaryOp = do
+  op <-
+    choice
+      [ Div <$ symbol "/",
+        Mul <$ symbol "*",
+        Add <$ symbol "+",
+        Sub <$ symbol "-"
+      ]
+  BinOp op (Lit (CR 0 0)) . Lit <$> number
 
 addExpr :: Parser Expr
 addExpr = do
