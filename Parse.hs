@@ -20,17 +20,8 @@ import Data.Either (isRight)
 import Data.Functor (void, ($>))
 import Data.Ratio ((%))
 import Data.Void (Void)
-import Test.QuickCheck
-  ( Arbitrary (arbitrary),
-    Property,
-    Testable (property),
-    choose,
-    counterexample,
-    elements,
-    quickCheck,
-    vectorOf,
-    (==>),
-  )
+import Test.QuickCheck (Arbitrary (arbitrary), Property, Testable (property), choose, counterexample, elements, frequency, oneof, quickCheck, sized, vectorOf, withMaxSuccess, (==>))
+import Test.QuickCheck.Gen (Gen)
 import Text.Megaparsec (MonadParsec (eof, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -113,11 +104,18 @@ data Op = Add | Sub | Mul | Div
 data UnaryOp = Neg | Sqrt | Abs | OpAsCombinator Op
   deriving (Show, Eq)
 
+complexOpEndingExpr :: Parser Expr
+complexOpEndingExpr = do
+  e <- addExpr
+  op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
+  return $ BinOp op e (Lit (CR 0 0))
+
 -- Updated pipelineOp parser to handle all cases
 pipelineOp :: Parser Expr
 pipelineOp =
   choice
-    [ try prefixBinaryOp, -- Like /2 meaning x/2
+    [ try complexOpEndingExpr,
+      try prefixBinaryOp, -- Like /2 meaning x/2
       try postfixBinaryOp, -- Like 2/ meaning 2/x
       try unaryPipeOp, -- Like sqrt meaning sqrt x
       try incompleteOp, -- Like +2 meaning x+2
@@ -170,9 +168,14 @@ pipelineOp =
           UnOp Abs <$> (symbol "abs" $> Lit (CR 0 0))
         ]
 
--- Modified version of the expr parser to fix pipeline issues
 expr :: Parser Expr
-expr = pipelineExpr
+expr = do
+  initial <- addExpr
+  pipelines <- many $ try $ do
+    _ <- symbol "|>"
+    sc -- Consume whitespace
+    pipelineOp -- Use the existing pipelineOp parser
+  pure $ foldl Pipeline initial pipelines
 
 -- New parser that specifically handles pipeline expressions
 pipelineExpr :: Parser Expr
@@ -355,13 +358,14 @@ prop_pipelineMultiStep (ValidName x) a b c =
       makeAssignment "result" $
         x ++ " |> +" ++ show a ++ " |> /" ++ show b ++ " |> *" ++ show c
 
-{- -- Property test for unary operations in pipelines
+-- Property test for unary operations in pipelines
 prop_pipelineUnaryOp :: ValidName -> Property
 prop_pipelineUnaryOp (ValidName x) =
-  isRight $
-    parseProgram $
-      makeAssignment "result" $
-        x ++ " |> sqrt |> *2" -}
+  property $
+    isRight $
+      parseProgram $
+        makeAssignment "result" $
+          x ++ " |> sqrt |> *2"
 
 -- Property test for nested expressions in pipelines
 prop_pipelineNestedExpr :: ValidName -> Double -> Double -> Property
@@ -524,3 +528,92 @@ testPipelineWithAssignment = do
         Right result -> do
           putStrLn $ "Success!"
           putStrLn $ "AST: " ++ show result
+
+-- Add these to Parse.hs for arbitrary expression generation
+
+-- Arbitrary instance for generating random operators
+instance Arbitrary Op where
+  arbitrary = elements [Add, Sub, Mul, Div]
+
+-- Arbitrary instance for generating random unary operators
+instance Arbitrary UnaryOp where
+  arbitrary = elements [Neg, Sqrt, Abs]
+
+-- Fixed instance for generating random complex rationals
+instance Arbitrary ComplexRational where
+  arbitrary = do
+    num <- choose (-10, 10) :: Gen Integer
+    den <- choose (1, 10) :: Gen Integer -- Avoid zero denominator
+    return $ CR (num % den) 0 -- Convert to Rational with % operator
+
+-- Generate arbitrary expressions with a size parameter to control depth
+genExpr :: Int -> Gen Expr
+genExpr 0 =
+  oneof
+    [ Lit <$> arbitrary,
+      Ref . unValidName <$> arbitrary
+    ]
+  where
+    unValidName (ValidName s) = s
+genExpr n
+  | n > 0 =
+      frequency
+        [ (3, BinOp <$> arbitrary <*> genExpr (n - 1) <*> genExpr (n - 1)),
+          (1, UnOp <$> arbitrary <*> genExpr (n - 1)),
+          (2, Pipeline <$> genExpr (n - 1) <*> genExpr (n - 1)),
+          (1, Lit <$> arbitrary),
+          (1, Ref . unValidName <$> arbitrary)
+        ]
+  where
+    unValidName (ValidName s) = s
+
+instance Arbitrary Expr where
+  arbitrary = sized genExpr
+
+-- Generate a string representation of an expression
+showExpr :: Expr -> String
+showExpr (Lit (CR r _)) = show r
+showExpr (Ref name) = name
+showExpr (BinOp Add e1 e2) = "(" ++ showExpr e1 ++ " + " ++ showExpr e2 ++ ")"
+showExpr (BinOp Sub e1 e2) = "(" ++ showExpr e1 ++ " - " ++ showExpr e2 ++ ")"
+showExpr (BinOp Mul e1 e2) = "(" ++ showExpr e1 ++ " * " ++ showExpr e2 ++ ")"
+showExpr (BinOp Div e1 e2) = "(" ++ showExpr e1 ++ " / " ++ showExpr e2 ++ ")"
+showExpr (UnOp Neg e) = "(-" ++ showExpr e ++ ")"
+showExpr (UnOp Sqrt e) = "sqrt(" ++ showExpr e ++ ")"
+showExpr (UnOp Abs e) = "abs(" ++ showExpr e ++ ")"
+showExpr (Pipeline e1 e2) = "(" ++ showExpr e1 ++ " |> " ++ showExpr e2 ++ ")"
+
+-- Property: Any arbitrary expression can be parsed
+prop_parseArbitraryExpr :: Expr -> Property
+prop_parseArbitraryExpr expr =
+  let str = showExpr expr
+      assignment = makeAssignment "result" str
+      parsed = parseProgram assignment
+   in counterexample
+        ("Failed to parse: " ++ str)
+        (isRight parsed)
+
+-- Property: Round-trip property - parsing and then showing gives equivalent expression
+prop_parseRoundTrip :: Expr -> Property
+prop_parseRoundTrip expr =
+  let str = showExpr expr
+      assignment = makeAssignment "result" str
+      parsed = parseProgram assignment
+   in case parsed of
+        Right [NamedValue _ expr'] ->
+          counterexample
+            ("Original: " ++ str ++ "\nParsed as: " ++ show expr')
+            (expr' == expr)
+        Left err ->
+          counterexample
+            ("Failed to parse: " ++ str ++ "\nError: " ++ errorBundlePretty err)
+            False
+
+-- Add these to your test function
+testArbitraryExpressions :: IO ()
+testArbitraryExpressions = do
+  putStrLn "Testing parsing of arbitrary expressions..."
+  quickCheck (withMaxSuccess 100 prop_parseArbitraryExpr)
+
+  putStrLn "Testing round-trip parsing of expressions..."
+  quickCheck (withMaxSuccess 100 prop_parseRoundTrip)
