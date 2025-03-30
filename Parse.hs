@@ -14,6 +14,7 @@ import ComplexRational (ComplexRational (CR))
 import Control.Monad (void)
 import Data.Char (isDigit)
 import Data.Complex (Complex (..))
+import Data.Either (isRight)
 import Data.Functor (void, ($>))
 import Data.Ratio ((%))
 import Data.Void (Void)
@@ -160,7 +161,7 @@ expr = do
   initial <- addExpr
   rest <- many $ try $ do
     _ <- symbol "|>"
-    pipelineOp
+    addExpr
   pure $ foldl makePipeline initial rest
   where
     -- Replace placeholder zeros with the piped value
@@ -288,6 +289,54 @@ prop_whitespaceInvariance (ValidName x) n1 n2 =
         )
         allEqual
 
+-- Property test for prefix operations in pipelines (e.g., "x |> +n")
+prop_pipelinePrefixOp :: ValidName -> Double -> Double -> Property
+prop_pipelinePrefixOp (ValidName x) a b =
+  b /= 0 ==> isRight $
+    parseProgram $
+      makeAssignment "result" $
+        x ++ " |> +" ++ show a ++ " |> *" ++ show b
+
+-- Property test for postfix operations in pipelines (e.g., "x |> n+")
+prop_pipelinePostfixOp :: ValidName -> Double -> Double -> Property
+prop_pipelinePostfixOp (ValidName x) a b =
+  b /= 0 ==> isRight $
+    parseProgram $
+      makeAssignment "result" $
+        x ++ " |> " ++ show a ++ "+ |> " ++ show b ++ "*"
+
+-- Property test for mixed operations in pipelines
+prop_pipelineMixedOps :: ValidName -> Double -> Double -> Property
+prop_pipelineMixedOps (ValidName x) a b =
+  b /= 0 ==> isRight $
+    parseProgram $
+      makeAssignment "result" $
+        x ++ " |> +" ++ show a ++ " |> " ++ show b ++ "/"
+
+-- Property test for multi-step pipelines
+prop_pipelineMultiStep :: ValidName -> Double -> Double -> Double -> Property
+prop_pipelineMultiStep (ValidName x) a b c =
+  b /= 0 && c /= 0 ==> isRight $
+    parseProgram $
+      makeAssignment "result" $
+        x ++ " |> +" ++ show a ++ " |> /" ++ show b ++ " |> *" ++ show c
+
+{- -- Property test for unary operations in pipelines
+prop_pipelineUnaryOp :: ValidName -> Property
+prop_pipelineUnaryOp (ValidName x) =
+  isRight $
+    parseProgram $
+      makeAssignment "result" $
+        x ++ " |> sqrt |> *2" -}
+
+-- Property test for nested expressions in pipelines
+prop_pipelineNestedExpr :: ValidName -> Double -> Double -> Property
+prop_pipelineNestedExpr (ValidName x) a b =
+  a /= 0 && b /= 0 ==> isRight $
+    parseProgram $
+      makeAssignment "result" $
+        x ++ " |> *(" ++ show a ++ "+" ++ show b ++ ") |> /(" ++ show b ++ "-" ++ show (b / 2) ++ ")"
+
 -- Helper to make a complete assignment
 makeAssignment :: String -> String -> String
 makeAssignment name expr = name ++ " = " ++ expr
@@ -301,3 +350,21 @@ test = do
   quickCheck prop_pipelinePostDivEquiv
   putStrLn "Testing whitespace invariance..."
   quickCheck prop_whitespaceInvariance
+
+  putStrLn "Testing pipeline prefix operations..."
+  quickCheck prop_pipelinePrefixOp
+
+  putStrLn "Testing pipeline postfix operations..."
+  quickCheck prop_pipelinePostfixOp
+
+  putStrLn "Testing mixed pipeline operations..."
+  quickCheck prop_pipelineMixedOps
+
+  putStrLn "Testing multi-step pipelines..."
+  quickCheck prop_pipelineMultiStep
+
+  {-   putStrLn "Testing unary operations in pipelines..."
+    quickCheck prop_pipelineUnaryOp
+   -}
+  putStrLn "Testing nested expressions in pipelines..."
+  quickCheck prop_pipelineNestedExpr
