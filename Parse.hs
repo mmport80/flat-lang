@@ -58,7 +58,7 @@ rationalParser = do
   let denominator = 10 ^ length fractionalStr
 
   -- Combine integer and fractional parts
-  return $ (intPart % 1) + (fractionalPart % denominator)
+  return $ intPart % 1 + fractionalPart % denominator
 
 integerAsRationalParser :: Parser Rational
 integerAsRationalParser = do
@@ -86,12 +86,12 @@ scientificParser = do
 
   -- Parse the exponent part
   _ <- char 'e' <|> char 'E'
-  expSign <- option 1 (-1 <$ char '-') <|> (1 <$ optional (char '+'))
+  expSign <- option 1 (-1 <$ char '-') <|> 1 <$ optional (char '+')
   expVal <- L.decimal
 
   -- Calculate the result: base * 10^exp
   let exp = expSign * expVal
-  return $ base * (10 ^^ exp)
+  return $ base * 10 ^^ exp
 
 data Expr
   = BinOp Op Expr Expr
@@ -101,7 +101,7 @@ data Expr
   | Pipeline Expr Expr
   deriving (Show, Eq)
 
-data Op = Add | Sub | Mul | Div
+data Op = Add | Sub | Mul | Div | Pow
   deriving (Show, Eq)
 
 data UnaryOp = Neg | Sqrt | Abs | OpAsCombinator Op
@@ -110,7 +110,7 @@ data UnaryOp = Neg | Sqrt | Abs | OpAsCombinator Op
 complexOpEndingExpr :: Parser Expr
 complexOpEndingExpr = do
   e <- addExpr
-  op <- (Div <$ symbol "/") <|> (Mul <$ symbol "*") <|> (Add <$ symbol "+") <|> (Sub <$ symbol "-")
+  op <- Div <$ symbol "/" <|> Mul <$ symbol "*" <|> Add <$ symbol "+" <|> Sub <$ symbol "-"
   return $ BinOp op e (Lit (CR 0 0))
 
 -- Updated pipelineOp parser to handle all cases
@@ -132,7 +132,8 @@ pipelineOp =
           [ Add <$ symbol "+",
             Sub <$ symbol "-",
             Mul <$ symbol "*",
-            Div <$ symbol "/"
+            Div <$ symbol "/",
+            Pow <$ symbol "^"
           ]
       expr <- addExpr
       -- Return a binary operation with a placeholder for the left operand
@@ -146,7 +147,8 @@ pipelineOp =
           [ Div <$ symbol "/",
             Mul <$ symbol "*",
             Add <$ symbol "+",
-            Sub <$ symbol "-"
+            Sub <$ symbol "-",
+            Pow <$ symbol "^"
           ]
       -- Return binary op with placeholder for right side
       pure $ BinOp op (Lit val) (Lit (CR 0 0))
@@ -158,7 +160,8 @@ pipelineOp =
           [ Div <$ symbol "/",
             Mul <$ symbol "*",
             Add <$ symbol "+",
-            Sub <$ symbol "-"
+            Sub <$ symbol "-",
+            Pow <$ symbol "^"
           ]
       val <- number
       -- Return binary op with placeholder for left side
@@ -169,7 +172,7 @@ pipelineOp =
       choice
         [ UnOp Sqrt <$> (symbol "sqrt" $> Lit (CR 0 0)),
           UnOp Abs <$> (symbol "abs" $> Lit (CR 0 0)),
-          UnOp Neg <$> (try $ symbol "-" *> notFollowedBy (satisfy isDigit) $> Lit (CR 0 0))
+          UnOp Neg <$> try (symbol "-" *> notFollowedBy (satisfy isDigit) $> Lit (CR 0 0))
         ]
 
 expr :: Parser Expr
@@ -212,7 +215,8 @@ prefixBinaryOp = do
       [ Div <$ symbol "/",
         Mul <$ symbol "*",
         Add <$ symbol "+",
-        Sub <$ symbol "-"
+        Sub <$ symbol "-",
+        Pow <$ symbol "^"
       ]
   BinOp op (Lit (CR 0 0)) . Lit <$> number
 
@@ -220,17 +224,26 @@ addExpr :: Parser Expr
 addExpr = do
   initial <- mulExpr
   rest <- many $ try $ do
-    op <- (Add <$ symbol "+") <|> (Sub <$ symbol "-")
+    op <- Add <$ symbol "+" <|> Sub <$ symbol "-"
     term <- mulExpr
     pure (op, term)
   pure $ foldl (\acc (op, term) -> BinOp op acc term) initial rest
 
 mulExpr :: Parser Expr
 mulExpr = do
+  initial <- powExpr
+  rest <- many $ try $ do
+    op <- Mul <$ symbol "*" <|> Div <$ symbol "/"
+    term' <- term
+    pure (op, term')
+  pure $ foldl (\acc (op, term') -> BinOp op acc term') initial rest
+
+powExpr :: Parser Expr
+powExpr = do
   initial <- term
   rest <- many $ try $ do
-    op <- (Mul <$ symbol "*") <|> (Div <$ symbol "/")
-    term' <- term
+    op <- Pow <$ symbol "^"
+    term' <- powExpr
     pure (op, term')
   pure $ foldl (\acc (op, term') -> BinOp op acc term') initial rest
 
@@ -421,7 +434,7 @@ debugPipelineDivEquiv varName n = do
       result1 = parseProgram assignment1
       result2 = parseProgram assignment2
 
-  putStrLn $ "Testing equivalence of:"
+  putStrLn "Testing equivalence of:"
   putStrLn $ "  1) " ++ assignment1
   putStrLn $ "  2) " ++ assignment2
   putStrLn ""
@@ -530,7 +543,7 @@ testPipelineWithAssignment = do
       case parseProgram input of
         Left err -> putStrLn $ "Error: " ++ errorBundlePretty err
         Right result -> do
-          putStrLn $ "Success!"
+          putStrLn "Success!"
           putStrLn $ "AST: " ++ show result
 
 {-
