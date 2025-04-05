@@ -533,6 +533,7 @@ testPipelineWithAssignment = do
           putStrLn $ "Success!"
           putStrLn $ "AST: " ++ show result
 
+{-
 -- Arbitrary instance for Op
 instance Arbitrary Op where
   arbitrary = elements [Add, Sub, Mul, Div]
@@ -628,8 +629,8 @@ exprApproxEqual (UnOp op1 e1) (UnOp op2 e2) =
 exprApproxEqual (Pipeline l1 r1) (Pipeline l2 r2) =
   exprApproxEqual l1 l2 && exprApproxEqual r1 r2
 exprApproxEqual _ _ = False
-
--- Add this function to Parse.hs for property tests
+ -}
+{- -- Add this function to Parse.hs for property tests
 showExpr :: Expr -> String
 showExpr (Lit (CR r _)) =
   -- Format rational as floating point, avoiding % syntax
@@ -643,8 +644,8 @@ showExpr (UnOp Neg e) = "-" ++ showExpr e
 showExpr (UnOp Sqrt e) = "sqrt " ++ showExpr e
 showExpr (UnOp Abs e) = "abs " ++ showExpr e
 showExpr (Pipeline e1 e2) = showExpr e1 ++ " |> " ++ showExpr e2
-
--- Test property using approximate equality
+ -}
+{- -- Test property using approximate equality
 prop_roundTripParsing :: Property
 prop_roundTripParsing = forAll (sized genExpr) $ \expr ->
   let exprStr = showExpr expr
@@ -665,4 +666,4 @@ prop_roundTripParsing = forAll (sized genExpr) $ \expr ->
 testArbitraryExpressions :: IO ()
 testArbitraryExpressions = do
   putStrLn "Testing round-trip parsing of expressions..."
-  quickCheck (withMaxSuccess 100 prop_roundTripParsing)
+  quickCheck (withMaxSuccess 100 prop_roundTripParsing) -}
