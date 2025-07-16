@@ -30,7 +30,7 @@ Open development environment:
 
 Run Flat Lang syntax property tests:
 
-`ghcid --command="ghci Main.hs" --test=":run runParserTests"`
+`ghcid --command="ghci Parse.hs" --test=":run test"`
 
 Interactively parse:
 

@@ -107,118 +107,68 @@ data Op = Add | Sub | Mul | Div | Pow
 data UnaryOp = Neg | Sqrt | Abs | OpAsCombinator Op
   deriving (Show, Eq)
 
-complexOpEndingExpr :: Parser Expr
+
+complexOpEndingExpr :: Parser (Expr -> Expr)
 complexOpEndingExpr = do
   e <- addExpr
   op <- Div <$ symbol "/" <|> Mul <$ symbol "*" <|> Add <$ symbol "+" <|> Sub <$ symbol "-"
-  return $ BinOp op e (Lit (CR 0 0))
-
--- Updated pipelineOp parser to handle all cases
-pipelineOp :: Parser Expr
+  -- e goes LEFT, piped value goes RIGHT (to match original placeholder position)
+  return $ \pipedValue -> BinOp op e pipedValue
+  
+-- Replace your pipelineOp with this:
+pipelineOp :: Parser (Expr -> Expr)  -- Returns a FUNCTION instead of Expr
 pipelineOp =
   choice
-    [ try complexOpEndingExpr,
-      try prefixBinaryOp, -- Like /2 meaning x/2
-      try postfixBinaryOp, -- Like 2/ meaning 2/x
-      try unaryPipeOp, -- Like sqrt meaning sqrt x
-      try incompleteOp, -- Like +2 meaning x+2
-      addExpr -- Default to normal expressions
+    [ 
+      try prefixBinaryOp,     -- /2 meaning x/2
+      try postfixBinaryOp,    -- 2/ meaning 2/x  
+      try unaryPipeOp,        -- sqrt meaning sqrt x
+      try incompleteOp,       -- +2 meaning x+2
+      (\x -> Pipeline x) <$> addExpr  -- Default: keep as pipeline
     ]
   where
-    -- Handle incomplete binary operations
+    -- Handle incomplete binary operations - NO PLACEHOLDERS!
     incompleteOp = do
-      op <-
-        choice
-          [ Add <$ symbol "+",
-            Sub <$ symbol "-",
-            Mul <$ symbol "*",
-            Div <$ symbol "/",
-            Pow <$ symbol "^"
-          ]
+      op <- choice [Add <$ symbol "+", Sub <$ symbol "-", 
+                   Mul <$ symbol "*", Div <$ symbol "/"]
       expr <- addExpr
-      -- Return a binary operation with a placeholder for the left operand
-      pure $ BinOp op (Lit (CR 0 0)) expr
-
-    -- Postfix operator (e.g., "2/")
+      -- Return FUNCTION that takes left operand
+      pure $ \leftExpr -> BinOp op leftExpr expr
+      
+    -- Postfix operator (e.g., "2/") - NO PLACEHOLDERS!
     postfixBinaryOp = do
       val <- number
-      op <-
-        choice
-          [ Div <$ symbol "/",
-            Mul <$ symbol "*",
-            Add <$ symbol "+",
-            Sub <$ symbol "-",
-            Pow <$ symbol "^"
-          ]
-      -- Return binary op with placeholder for right side
-      pure $ BinOp op (Lit val) (Lit (CR 0 0))
-
-    -- Prefix operator (e.g., "/2")
+      op <- choice [Div <$ symbol "/", Mul <$ symbol "*",
+                   Add <$ symbol "+", Sub <$ symbol "-"]
+      -- Return FUNCTION that takes right operand  
+      pure $ \rightExpr -> BinOp op (Lit val) rightExpr
+      
+    -- Prefix operator (e.g., "/2") - NO PLACEHOLDERS!
     prefixBinaryOp = do
-      op <-
-        choice
-          [ Div <$ symbol "/",
-            Mul <$ symbol "*",
-            Add <$ symbol "+",
-            Sub <$ symbol "-",
-            Pow <$ symbol "^"
-          ]
+      op <- choice [Div <$ symbol "/", Mul <$ symbol "*",
+                   Add <$ symbol "+"]
       val <- number
-      -- Return binary op with placeholder for left side
-      pure $ BinOp op (Lit (CR 0 0)) (Lit val)
+      -- Return FUNCTION that takes left operand
+      pure $ \leftExpr -> BinOp op leftExpr (Lit val)
+      
+    -- Unary operators - NO PLACEHOLDERS!
+    unaryPipeOp = choice
+      [ (\x -> UnOp Sqrt x) <$ symbol "sqrt",
+        (\x -> UnOp Abs x) <$ symbol "abs",
+        (\x -> UnOp Neg x) <$ try (symbol "-" *> notFollowedBy (satisfy isDigit))
+      ]
+      
 
-    -- Unary operators like sqrt or abs
-    unaryPipeOp =
-      choice
-        [ UnOp Sqrt <$> (symbol "sqrt" $> Lit (CR 0 0)),
-          UnOp Abs <$> (symbol "abs" $> Lit (CR 0 0)),
-          UnOp Neg <$> try (symbol "-" *> notFollowedBy (satisfy isDigit) $> Lit (CR 0 0))
-        ]
-
+-- Update your expr function:
 expr :: Parser Expr
 expr = do
   initial <- addExpr
-  pipelines <- many $ try $ do
+  pipelineFuncs <- many $ try $ do
     _ <- symbol "|>"
-    sc -- Consume whitespace
-    pipelineOp -- Use the existing pipelineOp parser
-  pure $ foldl Pipeline initial pipelines
-
--- New parser that specifically handles pipeline expressions
-pipelineExpr :: Parser Expr
-pipelineExpr = do
-  initial <- addExpr
-  option initial $ do
-    _ <- symbol "|>"
-    op <- pipelineOp
-    rest <- option op $ do
-      _ <- symbol "|>"
-      pipelineExpr
-    pure $ makePipeline initial (if rest == op then op else Pipeline op rest)
-  where
-    -- Replace placeholder zeros with the piped value
-    makePipeline :: Expr -> Expr -> Expr
-    makePipeline pipedVal (BinOp op (Lit (CR 0 0)) right) =
-      BinOp op pipedVal right
-    makePipeline pipedVal (BinOp op left (Lit (CR 0 0))) =
-      BinOp op left pipedVal
-    makePipeline pipedVal (UnOp uop (Lit (CR 0 0))) =
-      UnOp uop pipedVal
-    makePipeline pipedVal expr =
-      Pipeline pipedVal expr
-
--- Fixed prefixBinaryOp parser for pipeline operations
-prefixBinaryOp :: Parser Expr
-prefixBinaryOp = do
-  op <-
-    choice
-      [ Div <$ symbol "/",
-        Mul <$ symbol "*",
-        Add <$ symbol "+",
-        Sub <$ symbol "-",
-        Pow <$ symbol "^"
-      ]
-  BinOp op (Lit (CR 0 0)) . Lit <$> number
+    sc
+    pipelineOp  -- Now returns (Expr -> Expr)
+  pure $ foldl (\acc f -> f acc) initial pipelineFuncs
+  
 
 addExpr :: Parser Expr
 addExpr = do
@@ -390,7 +340,7 @@ prop_pipelineNestedExpr (ValidName x) a b =
   a /= 0 && b /= 0 ==> isRight $
     parseProgram $
       makeAssignment "result" $
-        x ++ " |> *(" ++ show a ++ "+" ++ show b ++ ") |> /(" ++ show b ++ "-" ++ show (b / 2) ++ ")"
+        x ++ " |> *(" ++ show a ++ " + " ++ show b ++ ") |> /(" ++ show b ++ " - " ++ show (b / 2) ++ ")"
 
 -- Helper to make a complete assignment
 makeAssignment :: String -> String -> String

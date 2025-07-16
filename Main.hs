@@ -25,9 +25,9 @@ evalFile filename = do
               mapM_
                 ( \(k, v) -> do
                     putStr $ k ++
-                      case from v of
-                        Right val -> val
-                        Left err ->  "Error: " ++ err
+                      case (from v :: Either String Double) of
+                        Right val -> show val
+                        Left err -> "Error: " ++ err
                 )
                 $ Map.toList env
 
