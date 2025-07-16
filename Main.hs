@@ -24,10 +24,10 @@ evalFile filename = do
               putStrLn "Evaluated program:"
               mapM_
                 ( \(k, v) -> do
-                    putStr $ k ++ " = "
-                    case from v of
-                      Right val -> print val
-                      Left err -> putStrLn $ "Error: " ++ err
+                    putStr $ k ++
+                      case from v of
+                        Right val -> val
+                        Left err ->  "Error: " ++ err
                 )
                 $ Map.toList env
 

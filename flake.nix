@@ -13,31 +13,35 @@
         overlays = [];
       };
 
-
+    forAllSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-darwin" ];
       
     in {
-      devShell.${system} = pkgs.mkShell {
-        buildInputs = [
-          pkgs.haskell-language-server 
-          pkgs.ormolu 
-          pkgs.ghcid 
-          pkgs.git
-          pkgs.starship
-          (pkgs.haskellPackages.ghcWithPackages (hsPkgs: with hsPkgs; [
-            ad 
-            normaldistribution 
-            lens 
-            random-fu 
-            safe 
-            QuickCheck
-            megaparsec
-            parser-combinators
-          ]))
+    devShells = forAllSystems (system:
+      let pkgs = import nixpkgs { inherit system; }; in {
+        default = pkgs.mkShell {
+          buildInputs = [
+            pkgs.haskell-language-server 
+            pkgs.ormolu 
+            pkgs.ghcid 
+            pkgs.git
+            pkgs.starship
+            (pkgs.haskellPackages.ghcWithPackages (hsPkgs: with hsPkgs; [
+              ad 
+              normaldistribution 
+              lens 
+              random-fu 
+              safe 
+              QuickCheck
+              megaparsec
+              parser-combinators
+            ]))
         ];
         
         shellHook = ''
           eval "$(starship init bash)"
         '';
       };
-    };
+    }
+  );
+};
 }

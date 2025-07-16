@@ -1,2 +1,7 @@
-x = 5
-y = x |> +1
+-- Flat Lang Examples
+-- This file contains well-known equations implemented in Flat Lang
+-- demonstrating its capabilities for numerical computation with error handling
+-- Now includes the power (^) operator
+
+-- Constants
+pi = 3.14159265359

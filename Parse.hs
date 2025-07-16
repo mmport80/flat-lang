@@ -531,7 +531,9 @@ testPipelineWithAssignment = do
           "a = 1 |> + 2", -- Basic prefix operation
           "b = a |> 2 -", -- Basic postfix operation
           "c = 1 / 1 |> 1 + 1 /", -- Complex expression
-          "d = c |> 2 / 2 + |> 0 /" -- Chained pipelines
+          "d = c |> 2 / 2 + |> 0 /", -- Chained pipelines
+          "e = 2 ^ 2",
+          "f = -1 ^ 2"
         ]
 
   putStrLn "=== Testing Complete Pipeline Statements ==="
