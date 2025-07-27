@@ -26,6 +26,7 @@ import Text.Megaparsec (MonadParsec (eof, notFollowedBy, try), ParseErrorBundle,
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Error (errorBundlePretty)
+import Data.List (foldl')
 
 type Parser = Parsec Void String
 
@@ -114,27 +115,27 @@ complexOpEndingExpr = do
   op <- Div <$ symbol "/" <|> Mul <$ symbol "*" <|> Add <$ symbol "+" <|> Sub <$ symbol "-"
   -- e goes LEFT, piped value goes RIGHT (to match original placeholder position)
   return $ \pipedValue -> BinOp op e pipedValue
-  
+
 -- Replace your pipelineOp with this:
 pipelineOp :: Parser (Expr -> Expr)  -- Returns a FUNCTION instead of Expr
 pipelineOp =
   choice
-    [ 
+    [
       try prefixBinaryOp,     -- /2 meaning x/2
       try postfixBinaryOp,    -- 2/ meaning 2/x  
       try unaryPipeOp,        -- sqrt meaning sqrt x
       try incompleteOp,       -- +2 meaning x+2
-      (\x -> Pipeline x) <$> addExpr  -- Default: keep as pipeline
+      Pipeline <$> addExpr  -- Default: keep as pipeline
     ]
   where
     -- Handle incomplete binary operations - NO PLACEHOLDERS!
     incompleteOp = do
-      op <- choice [Add <$ symbol "+", Sub <$ symbol "-", 
+      op <- choice [Add <$ symbol "+", Sub <$ symbol "-",
                    Mul <$ symbol "*", Div <$ symbol "/"]
       expr <- addExpr
       -- Return FUNCTION that takes left operand
       pure $ \leftExpr -> BinOp op leftExpr expr
-      
+
     -- Postfix operator (e.g., "2/") - NO PLACEHOLDERS!
     postfixBinaryOp = do
       val <- number
@@ -142,7 +143,7 @@ pipelineOp =
                    Add <$ symbol "+", Sub <$ symbol "-"]
       -- Return FUNCTION that takes right operand  
       pure $ \rightExpr -> BinOp op (Lit val) rightExpr
-      
+
     -- Prefix operator (e.g., "/2") - NO PLACEHOLDERS!
     prefixBinaryOp = do
       op <- choice [Div <$ symbol "/", Mul <$ symbol "*",
@@ -150,14 +151,14 @@ pipelineOp =
       val <- number
       -- Return FUNCTION that takes left operand
       pure $ \leftExpr -> BinOp op leftExpr (Lit val)
-      
+
     -- Unary operators - NO PLACEHOLDERS!
     unaryPipeOp = choice
-      [ (\x -> UnOp Sqrt x) <$ symbol "sqrt",
-        (\x -> UnOp Abs x) <$ symbol "abs",
-        (\x -> UnOp Neg x) <$ try (symbol "-" *> notFollowedBy (satisfy isDigit))
+      [ UnOp Sqrt <$ symbol "sqrt",
+        UnOp Abs <$ symbol "abs",
+        UnOp Neg <$ try (symbol "-" *> notFollowedBy (satisfy isDigit))
       ]
-      
+
 
 -- Update your expr function:
 expr :: Parser Expr
@@ -167,8 +168,8 @@ expr = do
     _ <- symbol "|>"
     sc
     pipelineOp  -- Now returns (Expr -> Expr)
-  pure $ foldl (\acc f -> f acc) initial pipelineFuncs
-  
+  pure $ foldl' (\acc f -> f acc) initial pipelineFuncs
+
 
 addExpr :: Parser Expr
 addExpr = do
@@ -195,7 +196,7 @@ powExpr = do
     op <- Pow <$ symbol "^"
     term' <- powExpr
     pure (op, term')
-  pure $ foldl (\acc (op, term') -> BinOp op acc term') initial rest
+  pure $ foldl' (\acc (op, term') -> BinOp op acc term') initial rest
 
 term :: Parser Expr
 term =
@@ -235,15 +236,7 @@ instance Arbitrary ValidName where
     rest <- vectorOf restLength $ elements $ ['a' .. 'z'] ++ ['0' .. '9']
     return $ ValidName (firstChar : rest)
 
-{- -- Pipeline equivalence properties
-prop_pipelineDivEquiv :: ValidName -> Double -> Property
-prop_pipelineDivEquiv (ValidName x) n =
-  n
-    /= 0
-      ==> let expr1 = x ++ " |> /" ++ show n
-              expr2 = x ++ " / " ++ show n
-           in parseProgram (makeAssignment "result" expr1) == parseProgram (makeAssignment "result" expr2)
- -}
+
 prop_pipelinePostDivEquiv :: ValidName -> Double -> Property
 prop_pipelinePostDivEquiv (ValidName x) n =
   n
@@ -497,138 +490,3 @@ testPipelineWithAssignment = do
         Right result -> do
           putStrLn "Success!"
           putStrLn $ "AST: " ++ show result
-
-{-
--- Arbitrary instance for Op
-instance Arbitrary Op where
-  arbitrary = elements [Add, Sub, Mul, Div]
-
--- Arbitrary instance for UnaryOp
-instance Arbitrary UnaryOp where
-  arbitrary = elements [Sqrt, Abs]
-
-instance Arbitrary Expr where
-  arbitrary = sized genExpr
-    where
-      genExpr :: Int -> Gen Expr
-      genExpr 0 =
-        oneof
-          [ genLiteral,
-            Ref <$> genIdent
-          ]
-      genExpr n
-        | n > 0 =
-            frequency
-              [ (3, genExpr 0),
-                ( 2,
-                  do
-                    left <- genExpr (n `div` 2)
-                    right <- genExpr (n `div` 2)
-                    op <- arbitrary
-                    return $ BinOp op left right
-                ),
-                ( 1,
-                  do
-                    expr <- genExpr (n - 1)
-                    op <- elements [Sqrt, Abs]
-                    return $ UnOp op expr
-                ),
-                (3, genComplexPipeline n)
-              ]
-
-      -- Generate pipelines with valid stages
-      genComplexPipeline :: Int -> Gen Expr
-      genComplexPipeline n = do
-        initial <- genExpr (n `div` 2)
-        numStages <- choose (1, min 3 n)
-        foldM addPipelineStage initial [1 .. numStages]
-
-      -- Generate a valid pipeline stage (key fix is here)
-      addPipelineStage :: Expr -> Int -> Gen Expr
-      addPipelineStage expr _ = do
-        -- Generate only valid pipeline stages for Flat Lang
-        stage <-
-          oneof
-            [ -- References are always safe
-              Ref <$> genIdent,
-              -- Operator with placeholder - safe for pipelines
-              do
-                op <- arbitrary
-                val <- genExpr 0
-                return $ BinOp op (Lit (CR 0 0)) val, -- Like /5
-
-              -- Standalone unary op (no argument) - this is key fix
-              -- abs means "apply abs to piped value" not "abs followed by something"
-              do
-                uop <- elements [Sqrt, Abs]
-                return $ UnOp uop (Lit (CR 0 0)) -- Like just "abs"
-            ]
-
-        return $ Pipeline expr stage
-
-      -- Generate a literal
-      genLiteral :: Gen Expr
-      genLiteral = do
-        -- Avoid exact zeros to prevent parser edge cases
-        n <- oneof [choose (-10.0, -0.001), choose (0.001, 10.0)] :: Gen Double
-        return $ Lit (CR (toRational n) 0)
-
-      -- Generate an identifier
-      genIdent :: Gen String
-      genIdent = do
-        c <- elements ['a' .. 'z']
-        len <- choose (1, 5)
-        cs <- vectorOf len $ elements $ ['a' .. 'z'] ++ ['0' .. '9']
-        return (c : cs)
-
--- Helper comparison function for tests
-exprApproxEqual :: Expr -> Expr -> Bool
-exprApproxEqual (Lit (CR r1 i1)) (Lit (CR r2 i2)) =
-  abs (fromRational r1 - fromRational r2) < 1e-10
-    && abs (fromRational i1 - fromRational i2) < 1e-10
-exprApproxEqual (Ref n1) (Ref n2) = n1 == n2
-exprApproxEqual (BinOp op1 l1 r1) (BinOp op2 l2 r2) =
-  op1 == op2 && exprApproxEqual l1 l2 && exprApproxEqual r1 r2
-exprApproxEqual (UnOp op1 e1) (UnOp op2 e2) =
-  op1 == op2 && exprApproxEqual e1 e2
-exprApproxEqual (Pipeline l1 r1) (Pipeline l2 r2) =
-  exprApproxEqual l1 l2 && exprApproxEqual r1 r2
-exprApproxEqual _ _ = False
- -}
-{- -- Add this function to Parse.hs for property tests
-showExpr :: Expr -> String
-showExpr (Lit (CR r _)) =
-  -- Format rational as floating point, avoiding % syntax
-  show (fromRational r :: Double)
-showExpr (Ref name) = name
-showExpr (BinOp Add e1 e2) = showExpr e1 ++ " + " ++ showExpr e2
-showExpr (BinOp Sub e1 e2) = showExpr e1 ++ " - " ++ showExpr e2
-showExpr (BinOp Mul e1 e2) = showExpr e1 ++ " * " ++ showExpr e2
-showExpr (BinOp Div e1 e2) = showExpr e1 ++ " / " ++ showExpr e2
-showExpr (UnOp Neg e) = "-" ++ showExpr e
-showExpr (UnOp Sqrt e) = "sqrt " ++ showExpr e
-showExpr (UnOp Abs e) = "abs " ++ showExpr e
-showExpr (Pipeline e1 e2) = showExpr e1 ++ " |> " ++ showExpr e2
- -}
-{- -- Test property using approximate equality
-prop_roundTripParsing :: Property
-prop_roundTripParsing = forAll (sized genExpr) $ \expr ->
-  let exprStr = showExpr expr
-   in case parseExpr exprStr of
-        Right parsed ->
-          counterexample
-            ("Original: " ++ exprStr ++ "\nParsed as: " ++ show parsed)
-            (exprApproxEqual expr parsed)
-        Left err ->
-          counterexample
-            ("Failed to parse: " ++ exprStr ++ "\nError: " ++ errorBundlePretty err)
-            False
-  where
-    genExpr :: Int -> Gen Expr
-    genExpr n = arbitrary
-
--- Add these to your test function
-testArbitraryExpressions :: IO ()
-testArbitraryExpressions = do
-  putStrLn "Testing round-trip parsing of expressions..."
-  quickCheck (withMaxSuccess 100 prop_roundTripParsing) -}
