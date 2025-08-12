@@ -27,6 +27,7 @@ import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Error (errorBundlePretty)
 
+
 type Parser = Parsec Void String
 
 sc :: Parser ()
@@ -153,8 +154,9 @@ pipelineOp =
       
     -- Unary operators - NO PLACEHOLDERS!
     unaryPipeOp = choice
-      [ (\x -> UnOp Sqrt x) <$ symbol "sqrt",
-        (\x -> UnOp Abs x) <$ symbol "abs",
+      [
+        (\x -> UnOp Sqrt x) <$ try (symbol "sqrt" <* notFollowedBy alphaNumChar),
+        (\x -> UnOp Abs x) <$ try (symbol "abs" <* notFollowedBy alphaNumChar),
         (\x -> UnOp Neg x) <$ try (symbol "-" *> notFollowedBy (satisfy isDigit))
       ]
       
@@ -200,9 +202,9 @@ powExpr = do
 term :: Parser Expr
 term =
   choice
-    [ between (symbol "(") (symbol ")") expr,
-      UnOp Sqrt <$> (symbol "sqrt" *> term),
-      UnOp Abs <$> (symbol "abs" *> term),
+    [ --between (symbol "(") (symbol ")") expr,
+      UnOp Sqrt <$> (try (symbol "sqrt" <* notFollowedBy alphaNumChar) *> term),
+      UnOp Abs <$> (try (symbol "abs" <* notFollowedBy alphaNumChar) *> term),
       Lit <$> number,
       Ref <$> identifier
     ]
