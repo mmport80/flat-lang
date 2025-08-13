@@ -10,18 +10,18 @@ g = 9.80665
 goldenRatio = 1.61803398875
 
 -- Physics
--- Einstein's mass-energy equivalence: E = mc²
+-- Einstein's mass-energy equivalence: E = mc2
 mass = 1
 cSquared = c * c
 energy = mass * cSquared
 
--- Kinetic energy: KE = ½mv²
+-- Kinetic energy: KE = (1/2)mv2
 velocity = 10
 vSquared = velocity * velocity
 halfMass = mass |> * 0.5
 kineticEnergy = halfMass * vSquared
 
--- Gravitational force: F = G * m1 * m2 / r²
+-- Gravitational force: F = G * m1 * m2 / r2
 G = 6.67430e-11
 m1 = 100
 m2 = 200
@@ -31,7 +31,7 @@ massProduct = G * m1 * m2
 gravitationalForce = massProduct / rSquared
 
 -- Geometry
--- Circle area: A = πr²
+-- Circle area: A = πr2
 radius = 5
 rSquaredCircle = radius * radius
 circleArea = pi * rSquaredCircle
@@ -39,12 +39,12 @@ circleArea = pi * rSquaredCircle
 -- Circle circumference: C = 2πr
 circumference = 2 * pi * radius
 
--- Sphere volume: V = (4/3)πr³
+-- Sphere volume: V = (4/3)πr3
 rCubed = radius * radius * radius
 fourThirds = 4 / 3
 sphereVolume = fourThirds * pi * rCubed
 
--- Pythagorean theorem: c² = a² + b²
+-- Pythagorean theorem: c2 = a2 + b2
 sideA = 3
 sideB = 4
 aSquared = sideA * sideA
@@ -52,7 +52,7 @@ bSquared = sideB * sideB
 cSquaredPyth = aSquared + bSquared
 hypotenuse = cSquaredPyth |> sqrt
 
--- Triangle area: A = ½bh
+-- Triangle area: A = (1/2)bh
 base = 6
 height = 8
 baseTimesHeight = base * height
@@ -72,7 +72,7 @@ ratePerCompound = rate / compoundsPerYear
 onePlusRate = 1 + ratePerCompound
 totalCompounds = compoundsPerYear * years
 
--- Quadratic formula: x = (-b ± √(b² - 4ac)) / 2a
+-- Quadratic formula: x = (-b ± sqrt(b2 - 4ac)) / 2a
 quadA = 1
 quadB = -5
 quadC = 6
@@ -133,11 +133,11 @@ cosApprox = 1 - halfAngleSquared
 threeSq = 3 * 3
 fourSq = 4 * 4
 sumSquares = threeSq + fourSq
-distanceFormula = sumSquares |> sqrt       -- √(3² + 4²)
+distanceFormula = sumSquares |> sqrt       -- sqrt(32 + 42)
 
 twoSq = 2 * 2
 baseArea = twoSq |> * pi
-volumeCylinder = baseArea |> * 10          -- πr²h where r=2, h=10
+volumeCylinder = baseArea |> * 10          -- πr2h where r=2, h=10
 
 difference = 150 - 100
 percentChange = difference |> / 100 |> * 100  -- percentage change

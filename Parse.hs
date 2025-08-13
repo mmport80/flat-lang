@@ -11,7 +11,7 @@ module Parse
     testPipelineWithAssignment,
   )
 where
-
+ 
 import ComplexRational (ComplexRational (CR))
 import Control.Monad (foldM, void, when)
 import Data.Char (isDigit)
@@ -22,8 +22,8 @@ import Data.Ratio ((%))
 import Data.Void (Void)
 import Test.QuickCheck (Arbitrary (arbitrary), Property, Testable (property), choose, counterexample, elements, forAll, frequency, oneof, quickCheck, sized, vectorOf, withMaxSuccess, (==>))
 import Test.QuickCheck.Gen (Gen)
-import Text.Megaparsec (MonadParsec (eof, notFollowedBy, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>))
-import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1)
+import Text.Megaparsec (MonadParsec (eof, notFollowedBy, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>), SourcePos, getSourcePos)
+import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1, string)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Error (errorBundlePretty)
 
@@ -98,7 +98,7 @@ data Expr
   = BinOp Op Expr Expr
   | UnOp UnaryOp Expr
   | Lit ComplexRational
-  | Ref String
+  | Ref String SourcePos
   | Pipeline Expr Expr
   deriving (Show, Eq)
 
@@ -123,8 +123,8 @@ pipelineOp =
     [ 
       try prefixBinaryOp,     -- /2 meaning x/2
       try postfixBinaryOp,    -- 2/ meaning 2/x  
-      try unaryPipeOp,        -- sqrt meaning sqrt x
       try incompleteOp,       -- +2 meaning x+2
+      try unaryPipeOp,        -- sqrt meaning sqrt x
       (\x -> Pipeline x) <$> addExpr  -- Default: keep as pipeline
     ]
   where
@@ -155,9 +155,9 @@ pipelineOp =
     -- Unary operators - NO PLACEHOLDERS!
     unaryPipeOp = choice
       [
-        (\x -> UnOp Sqrt x) <$ try (symbol "sqrt" <* notFollowedBy alphaNumChar),
-        (\x -> UnOp Abs x) <$ try (symbol "abs" <* notFollowedBy alphaNumChar),
-        (\x -> UnOp Neg x) <$ try (symbol "-" *> notFollowedBy (satisfy isDigit))
+        (\x -> UnOp Sqrt x) <$ try (string "sqrt" <* notFollowedBy alphaNumChar),
+        (\x -> UnOp Abs x) <$ try (string "abs" <* notFollowedBy alphaNumChar),
+        (\x -> UnOp Neg x) <$ try (string "-" *> notFollowedBy (satisfy isDigit))
       ]
       
 
@@ -176,7 +176,7 @@ addExpr :: Parser Expr
 addExpr = do
   initial <- mulExpr
   rest <- many $ try $ do
-    op <- Add <$ symbol "+" <|> Sub <$ symbol "-"
+    op <- Add <$ symbol "+" <|> Sub <$ symbol "-"  
     term <- mulExpr
     pure (op, term)
   pure $ foldl (\acc (op, term) -> BinOp op acc term) initial rest
@@ -206,7 +206,10 @@ term =
       UnOp Sqrt <$> (try (symbol "sqrt" <* notFollowedBy alphaNumChar) *> term),
       UnOp Abs <$> (try (symbol "abs" <* notFollowedBy alphaNumChar) *> term),
       Lit <$> number,
-      Ref <$> identifier
+      do
+        pos <- getSourcePos
+        name <- identifier
+        return $ Ref name pos
     ]
 
 data TopLevel = NamedValue String Expr
@@ -413,7 +416,7 @@ showExprStructure (BinOp op e1 e2) =
 showExprStructure (UnOp op e) =
   "UnOp " ++ show op ++ " (" ++ showExprStructure e ++ ")"
 showExprStructure (Lit _) = "Lit <value>" -- Abstract away the literal details
-showExprStructure (Ref name) = "Ref " ++ name
+showExprStructure (Ref name _) = "Ref " ++ name
 showExprStructure (Pipeline e1 e2) =
   "Pipeline (" ++ showExprStructure e1 ++ ") (" ++ showExprStructure e2 ++ ")"
 
