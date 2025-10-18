@@ -1,40 +1,40 @@
+{-# OPTIONS_GHC -Wall #-}
+
 module Main (main) where
 
-import Data.List (intercalate)
+import Data.Biapplicative (Bifunctor (first))
 import Data.Map qualified as Map
-import Data.Void (Void)
 import Eval (evalProgram)
 import NameValidator (validateProgram)
 import Ops (from)
-import Parse (Expr, TopLevel, parseProgram)
+import Parse (parseProgram)
 import System.Environment (getArgs)
+import Text.Megaparsec (errorBundlePretty)
 
 evalFile :: FilePath -> IO ()
 evalFile filename = do
   contents <- readFile filename
-  case parseProgram contents of
-    Left err -> putStrLn $ "Parse error: " ++ show err
-    Right ast ->
-      case validateProgram ast of
-        Left err -> putStrLn $ "Validation error: " ++ err
-        Right () ->
-          case evalProgram ast of
-            Left err -> putStrLn $ "Evaluation error: " ++ err
-            Right env -> do
-              putStrLn "Evaluated program:"
-              mapM_
-                ( \(k, v) -> do
-                    putStr $ k ++
-                      case (from v :: Either String Double) of
-                        Right val -> show val
-                        Left err -> "Error: " ++ err
-                )
-                $ Map.toList env
+
+  let result' = do
+        ast <- first errorBundlePretty $ parseProgram contents
+        _ <- first ("Validation error: " ++) $ validateProgram ast
+        first ("Evaluation error: " ++) $ evalProgram ast
+
+  case result' of
+    Left err -> putStrLn err
+    Right env -> do
+      putStrLn "Evaluated program:"
+      mapM_ printBinding $ Map.toList env
+  where
+    printBinding (k, v) =
+      putStrLn $
+        k ++ " = " ++ case from v of
+          Right (val :: Double) -> show val
+          Left err -> "Error: " ++ err
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     [filename] -> evalFile filename
-    -- Here you could continue with evaluation
     _ -> putStrLn "Usage: program <filename>  "

@@ -3,6 +3,7 @@ module NameValidator where
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Parse (Expr (..), TopLevel (..))
+import Text.Megaparsec (SourcePos)
 
 -- Validation result type
 type ValidationError = String
@@ -32,10 +33,10 @@ validateExpr expr definedNames = case expr of
     validateExpr e2 definedNames
   UnOp _ e -> validateExpr e definedNames
   Lit _ -> Right ()
-  Ref name ->
+  Ref name pos ->
     if Set.member name definedNames
       then Right ()
-      else Left $ "Reference to undefined name '" ++ name ++ "'"
+      else Left $ "Reference to undefined name '" ++ name ++ "' at " ++ show pos
   Pipeline e1 e2 -> do
     validateExpr e1 definedNames
     validateExpr e2 definedNames

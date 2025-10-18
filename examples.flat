@@ -1,7 +1,143 @@
 -- Flat Lang Examples
 -- This file contains well-known equations implemented in Flat Lang
 -- demonstrating its capabilities for numerical computation with error handling
--- Now includes the power (^) operator
 
 -- Constants
 pi = 3.14159265359
+e = 2.71828182846
+c = 299792458
+g = 9.80665
+goldenRatio = 1.61803398875
+
+-- Physics
+-- Einstein's mass-energy equivalence: E = mc2
+mass = 1
+cSquared = c * c
+energy = mass * cSquared
+
+-- Kinetic energy: KE = (1/2)mv2
+velocity = 10
+vSquared = velocity * velocity
+halfMass = mass |> * 0.5
+kineticEnergy = halfMass * vSquared
+
+-- Gravitational force: F = G * m1 * m2 / r2
+G = 6.67430e-11
+m1 = 100
+m2 = 200
+distance = 5
+rSquared = distance * distance
+massProduct = G * m1 * m2
+gravitationalForce = massProduct / rSquared
+
+-- Geometry
+-- Circle area: A = πr2
+radius = 5
+rSquaredCircle = radius * radius
+circleArea = pi * rSquaredCircle
+
+-- Circle circumference: C = 2πr
+circumference = 2 * pi * radius
+
+-- Sphere volume: V = (4/3)πr3
+rCubed = radius * radius * radius
+fourThirds = 4 / 3
+sphereVolume = fourThirds * pi * rCubed
+
+-- Pythagorean theorem: c2 = a2 + b2
+sideA = 3
+sideB = 4
+aSquared = sideA * sideA
+bSquared = sideB * sideB
+cSquaredPyth = aSquared + bSquared
+hypotenuse = cSquaredPyth |> sqrt
+
+-- Triangle area: A = (1/2)bh
+base = 6
+height = 8
+baseTimesHeight = base * height
+triangleArea = baseTimesHeight |> * 0.5
+
+-- Finance
+-- Simple interest: I = Prt
+principal = 1000
+rate = 0.05
+years = 10
+rateTimesTime = rate * years
+simpleInterest = principal * rateTimesTime
+
+-- Compound interest components
+compoundsPerYear = 12
+ratePerCompound = rate / compoundsPerYear
+onePlusRate = 1 + ratePerCompound
+totalCompounds = compoundsPerYear * years
+
+-- Quadratic formula: x = (-b ± sqrt(b2 - 4ac)) / 2a
+quadA = 1
+quadB = -5
+quadC = 6
+bSquaredQuad = quadB * quadB
+fourAc = 4 * quadA * quadC
+disc = bSquaredQuad - fourAc
+sqrtDisc = disc |> sqrt
+negB = quadB |> abs
+twoA = 2 * quadA
+sum1 = negB + sqrtDisc
+sum2 = negB - sqrtDisc
+quadSolution1 = sum1 / twoA
+quadSolution2 = sum2 / twoA
+
+-- Unit Conversions
+-- Temperature: Celsius to Fahrenheit: F = C * 9/5 + 32
+celsius = 25
+nineFifths = 9 / 5
+celsiusScaled = celsius * nineFifths
+fahrenheit = celsiusScaled + 32
+
+-- Distance: miles to kilometers
+miles = 10
+kmFactor = 1.60934
+kilometers = miles * kmFactor
+
+-- Pipeline Examples - chained calculations
+tempFtoC = 100 |> - 32 |> * 5 |> / 9      -- Fahrenheit to Celsius
+radiusTen = 10 * 10
+circleAreaPipe = radiusTen |> * pi         -- Circle area with radius 10
+radiusFive = 5 * 5
+sphereSurface = radiusFive |> * 4 |> * pi  -- Surface area of sphere
+
+-- Statistical calculations
+-- Mean of 2, 4, 6
+sumValues = 2 + 4 + 6
+mean = sumValues |> / 3
+
+-- Variance calculation - step by step
+meanDiff1 = 2 - mean
+meanDiff2 = 4 - mean  
+meanDiff3 = 6 - mean
+diff1Sq = meanDiff1 * meanDiff1
+diff2Sq = meanDiff2 * meanDiff2
+diff3Sq = meanDiff3 * meanDiff3
+sumDiffs = diff1Sq + diff2Sq + diff3Sq
+variance = sumDiffs |> / 2
+stdDev = variance |> sqrt
+
+-- Trigonometry approximations for small angles
+smallAngle = 0.1
+sinApprox = smallAngle
+angleSquared = smallAngle * smallAngle
+halfAngleSquared = angleSquared |> / 2
+cosApprox = 1 - halfAngleSquared
+
+-- More pipeline chains
+threeSq = 3 * 3
+fourSq = 4 * 4
+sumSquares = threeSq + fourSq
+distanceFormula = sumSquares |> sqrt       -- sqrt(32 + 42)
+
+twoSq = 2 * 2
+baseArea = twoSq |> * pi
+volumeCylinder = baseArea |> * 10          -- πr2h where r=2, h=10
+
+difference = 150 - 100
+percentChange = difference |> / 100 |> * 100  -- percentage change

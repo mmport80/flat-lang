@@ -12,9 +12,9 @@ import Data.Map qualified as Map
 import Ops (Cell (..), Operation (..), abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘))
 import Parse (Expr (..), Op (..), TopLevel (..), UnaryOp (..))
 
+
 -- Type aliases for clarity
 type EvalEnv = Map String Cell
-
 type EvalResult = Either String Cell
 
 -- Evaluate a full program, returning the final environment
@@ -33,10 +33,10 @@ evalExpr env expr = case expr of
   -- Handle literal values (convert to Cell)
   Lit cr -> Right $ Cell (Operation "constant" (Just cr) [])
   -- Look up variable references
-  Ref name -> case Map.lookup name env of
+  Ref name pos -> case Map.lookup name env of
     Just value -> Right value
-    Nothing -> Left $ "Undefined reference: " ++ name
-  -- Handle binary operations
+    Nothing -> Left $ "Undefined reference: " ++ name ++ " at " ++ show pos
+  -- handle binary operations
   BinOp op e1 e2 -> do
     v1 <- evalExpr env e1
     v2 <- evalExpr env e2
