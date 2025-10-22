@@ -20,12 +20,14 @@ import Data.Either (isRight)
 import Data.Functor (void, ($>))
 import Data.Ratio ((%))
 import Data.Void (Void)
-import Test.QuickCheck (Arbitrary (arbitrary), Property, Testable (property), choose, counterexample, elements, forAll, frequency, oneof, quickCheck, sized, vectorOf, withMaxSuccess, (==>))
+import Test.QuickCheck (Arbitrary (arbitrary), Property, Testable (property), choose, counterexample, elements, forAll, frequency, oneof, quickCheck, sized, vectorOf, withMaxSuccess, (==>), Args (chatty), quickCheckWith, maxSuccess, isSuccess, quickCheckResult, quickCheckWithResult)
 import Test.QuickCheck.Gen (Gen)
 import Text.Megaparsec (MonadParsec (eof, notFollowedBy, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>), SourcePos (sourceName, sourceColumn, sourceLine, SourcePos), getSourcePos, mkPos)
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1, string)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Error (errorBundlePretty)
+import Test.QuickCheck.Test
+    ( quickCheck, quickCheckWith, stdArgs, Args(chatty) )
 
 
 type Parser = Parsec Void String
@@ -375,33 +377,28 @@ prop_pipelineNestedExpr (ValidName x) a b =
 makeAssignment :: String -> String -> String
 makeAssignment name expr = name ++ " = " ++ expr
 
+testQuiet :: Testable prop => [Char] -> prop -> IO ()
+testQuiet name prop = do
+  result <- quickCheckWithResult stdArgs { chatty = False, maxSuccess = 100 } prop
+  if isSuccess result 
+    then putStr "."
+    else putStrLn $ "\n" ++ name ++ " FAILED"
+    
 -- Main property test function
 test :: IO ()
 test = do
-  putStrLn "Testing pipeline division equivalence..."
-  quickCheck prop_pipelineDivEquiv
-  putStrLn "Testing pipeline postfix division equivalence..."
-  quickCheck prop_pipelinePostDivEquiv
-  putStrLn "Testing whitespace invariance..."
-  quickCheck prop_whitespaceInvariance
-
-  putStrLn "Testing pipeline prefix operations..."
-  quickCheck prop_pipelinePrefixOp
-
-  putStrLn "Testing pipeline postfix operations..."
-  quickCheck prop_pipelinePostfixOp
-
-  putStrLn "Testing mixed pipeline operations..."
-  quickCheck prop_pipelineMixedOps
-
-  putStrLn "Testing multi-step pipelines..."
-  quickCheck prop_pipelineMultiStep
+  testQuiet "Testing pipeline division equivalence..." prop_pipelineDivEquiv
+  testQuiet "Testing pipeline postfix division equivalence..." prop_pipelinePostDivEquiv
+  testQuiet "Testing whitespace invariance..." prop_whitespaceInvariance
+  testQuiet "Testing pipeline prefix operations..."prop_pipelinePrefixOp
+  testQuiet "Testing pipeline postfix operations..." prop_pipelinePostfixOp
+  testQuiet "Testing mixed pipeline operations..." prop_pipelineMixedOps
+  testQuiet "Testing multi-step pipelines..." prop_pipelineMultiStep
 
   {-   putStrLn "Testing unary operations in pipelines..."
-    quickCheck prop_pipelineUnaryOp
+    testQuiet prop_pipelineUnaryOp
    -}
-  putStrLn "Testing nested expressions in pipelines..."
-  quickCheck prop_pipelineNestedExpr
+  testQuiet "Testing nested expressions in pipelines..." prop_pipelineNestedExpr
 
 -- Debugging function to examine parse results for pipeline division
 debugPipelineDivEquiv :: String -> Double -> IO ()
@@ -526,138 +523,3 @@ testPipelineWithAssignment = do
         Right result -> do
           putStrLn "Success!"
           putStrLn $ "AST: " ++ show result
-
-{-
--- Arbitrary instance for Op
-instance Arbitrary Op where
-  arbitrary = elements [Add, Sub, Mul, Div]
-
--- Arbitrary instance for UnaryOp
-instance Arbitrary UnaryOp where
-  arbitrary = elements [Sqrt, Abs]
-
-instance Arbitrary Expr where
-  arbitrary = sized genExpr
-    where
-      genExpr :: Int -> Gen Expr
-      genExpr 0 =
-        oneof
-          [ genLiteral,
-            Ref <$> genIdent
-          ]
-      genExpr n
-        | n > 0 =
-            frequency
-              [ (3, genExpr 0),
-                ( 2,
-                  do
-                    left <- genExpr (n `div` 2)
-                    right <- genExpr (n `div` 2)
-                    op <- arbitrary
-                    return $ BinOp op left right
-                ),
-                ( 1,
-                  do
-                    expr <- genExpr (n - 1)
-                    op <- elements [Sqrt, Abs]
-                    return $ UnOp op expr
-                ),
-                (3, genComplexPipeline n)
-              ]
-
-      -- Generate pipelines with valid stages
-      genComplexPipeline :: Int -> Gen Expr
-      genComplexPipeline n = do
-        initial <- genExpr (n `div` 2)
-        numStages <- choose (1, min 3 n)
-        foldM addPipelineStage initial [1 .. numStages]
-
-      -- Generate a valid pipeline stage (key fix is here)
-      addPipelineStage :: Expr -> Int -> Gen Expr
-      addPipelineStage expr _ = do
-        -- Generate only valid pipeline stages for Flat Lang
-        stage <-
-          oneof
-            [ -- References are always safe
-              Ref <$> genIdent,
-              -- Operator with placeholder - safe for pipelines
-              do
-                op <- arbitrary
-                val <- genExpr 0
-                return $ BinOp op (Lit (CR 0 0)) val, -- Like /5
-
-              -- Standalone unary op (no argument) - this is key fix
-              -- abs means "apply abs to piped value" not "abs followed by something"
-              do
-                uop <- elements [Sqrt, Abs]
-                return $ UnOp uop (Lit (CR 0 0)) -- Like just "abs"
-            ]
-
-        return $ Pipeline expr stage
-
-      -- Generate a literal
-      genLiteral :: Gen Expr
-      genLiteral = do
-        -- Avoid exact zeros to prevent parser edge cases
-        n <- oneof [choose (-10.0, -0.001), choose (0.001, 10.0)] :: Gen Double
-        return $ Lit (CR (toRational n) 0)
-
-      -- Generate an identifier
-      genIdent :: Gen String
-      genIdent = do
-        c <- elements ['a' .. 'z']
-        len <- choose (1, 5)
-        cs <- vectorOf len $ elements $ ['a' .. 'z'] ++ ['0' .. '9']
-        return (c : cs)
-
--- Helper comparison function for tests
-exprApproxEqual :: Expr -> Expr -> Bool
-exprApproxEqual (Lit (CR r1 i1)) (Lit (CR r2 i2)) =
-  abs (fromRational r1 - fromRational r2) < 1e-10
-    && abs (fromRational i1 - fromRational i2) < 1e-10
-exprApproxEqual (Ref n1) (Ref n2) = n1 == n2
-exprApproxEqual (BinOp op1 l1 r1) (BinOp op2 l2 r2) =
-  op1 == op2 && exprApproxEqual l1 l2 && exprApproxEqual r1 r2
-exprApproxEqual (UnOp op1 e1) (UnOp op2 e2) =
-  op1 == op2 && exprApproxEqual e1 e2
-exprApproxEqual (Pipeline l1 r1) (Pipeline l2 r2) =
-  exprApproxEqual l1 l2 && exprApproxEqual r1 r2
-exprApproxEqual _ _ = False
- -}
-{- -- Add this function to Parse.hs for property tests
-showExpr :: Expr -> String
-showExpr (Lit (CR r _)) =
-  -- Format rational as floating point, avoiding % syntax
-  show (fromRational r :: Double)
-showExpr (Ref name) = name
-showExpr (BinOp Add e1 e2) = showExpr e1 ++ " + " ++ showExpr e2
-showExpr (BinOp Sub e1 e2) = showExpr e1 ++ " - " ++ showExpr e2
-showExpr (BinOp Mul e1 e2) = showExpr e1 ++ " * " ++ showExpr e2
-showExpr (BinOp Div e1 e2) = showExpr e1 ++ " / " ++ showExpr e2
-showExpr (UnOp Neg e) = "-" ++ showExpr e
-showExpr (UnOp Sqrt e) = "sqrt " ++ showExpr e
-showExpr (UnOp Abs e) = "abs " ++ showExpr e
-showExpr (Pipeline e1 e2) = showExpr e1 ++ " |> " ++ showExpr e2
- -}
-{- -- Test property using approximate equality
-prop_roundTripParsing :: Property
-prop_roundTripParsing = forAll (sized genExpr) $ \expr ->
-  let exprStr = showExpr expr
-   in case parseExpr exprStr of
-        Right parsed ->
-          counterexample
-            ("Original: " ++ exprStr ++ "\nParsed as: " ++ show parsed)
-            (exprApproxEqual expr parsed)
-        Left err ->
-          counterexample
-            ("Failed to parse: " ++ exprStr ++ "\nError: " ++ errorBundlePretty err)
-            False
-  where
-    genExpr :: Int -> Gen Expr
-    genExpr n = arbitrary
-
--- Add these to your test function
-testArbitraryExpressions :: IO ()
-testArbitraryExpressions = do
-  putStrLn "Testing round-trip parsing of expressions..."
-  quickCheck (withMaxSuccess 100 prop_roundTripParsing) -}
