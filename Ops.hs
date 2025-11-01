@@ -145,6 +145,8 @@ from (Cell op) = case op.result of
 -----------------------------------------
 -----------------------------------------
 
+-- Todo: cleanup or move to examples.flat
+
 -- 'test 1'
 t1 :: Cell -> Cell -> Maybe Bool
 t1 a b = (a ⊘ b) ⊗ b ⊖ a ⊕ a ≫ abs' (sqrt' b)
@@ -183,13 +185,6 @@ f :: Cell -> Cell -> Cell -> Cell
 f m1 m2 r = g ⊗ m1 ⊗ m2 ⊘ sq r
   where
     g = to 6.67 ⊗ (to 10 ⊗⊗ negate' (to 11))
-
-{- fib :: Cell -> Cell
-fib (Cell op) = case op.result of
-  Just (0 :+ 0) -> to 0
-  Just (1 :+ 0) -> to 1
-  Just n -> fib (Cell op ⊖ to 1) ⊕ fib (Cell op ⊖ to 2)
-  Nothing -> to 0 -}
 
 -----------------------------------------
 

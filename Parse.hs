@@ -217,8 +217,7 @@ powExpr = do
 term :: Parser Expr
 term =
   choice
-    [ -- between (symbol "(") (symbol ")") expr,
-      UnOp Sqrt <$> (try (symbol "sqrt" <* notFollowedBy alphaNumChar) *> term),
+    [ UnOp Sqrt <$> (try (symbol "sqrt" <* notFollowedBy alphaNumChar) *> term),
       UnOp Abs <$> (try (symbol "abs" <* notFollowedBy alphaNumChar) *> term),
       Lit <$> number,
       do
@@ -269,15 +268,6 @@ stripSourcePos (Lit c) = Lit c
 stripSourcePos (Ref name _) = Ref name dummyPos
 stripSourcePos (Pipeline e1 e2) = Pipeline (stripSourcePos e1) (stripSourcePos e2)
 
-{- -- Pipeline equivalence properties
-prop_pipelineDivEquiv :: ValidName -> Double -> Property
-prop_pipelineDivEquiv (ValidName x) n =
-  n
-    /= 0
-      ==> let expr1 = x ++ " |> /" ++ show n
-              expr2 = x ++ " / " ++ show n
-           in parseProgram (makeAssignment "result" expr1) == parseProgram (makeAssignment "result" expr2)
- -}
 prop_pipelinePostDivEquiv :: ValidName -> Double -> Property
 prop_pipelinePostDivEquiv (ValidName x) n =
   n
@@ -401,9 +391,6 @@ test = do
   testQuiet "Testing mixed pipeline operations..." prop_pipelineMixedOps
   testQuiet "Testing multi-step pipelines..." prop_pipelineMultiStep
 
-  {-   putStrLn "Testing unary operations in pipelines..."
-    testQuiet prop_pipelineUnaryOp
-   -}
   testQuiet "Testing nested expressions in pipelines..." prop_pipelineNestedExpr
 
 -- Debugging function to examine parse results for pipeline division
