@@ -14,6 +14,7 @@ import Data.Sequence qualified as Seq
 import GHC.Base (when)
 import GHC.IO (unsafePerformIO)
 import Test.QuickCheck (Arbitrary, Property, quickCheck, (==>))
+import TestUtils
 
 -----------------------------------------
 
@@ -313,70 +314,34 @@ prop_mulDivIdentityNearZero =
 
 test :: IO ()
 test = do
-  -- print "1 + 1"
-  -- print $ from (to 1 ⊕ to 1)
-
-  -- print "Euler ID"
-  -- print eulerID
-
-  -- print "'f' 2 2 2"
-  -- print $ from $ f (to (2 :: Double)) (to (2 :: Double)) (to (2 :: Double))
-
-  -- print "fib 10"
-  -- print $ from $ fib $ to 10
-
   -- TODO: use complex double instead of just double
-  putStrLn "prop_addIdentity"
-  quickCheck (prop_addIdentity :: Double -> Bool)
-  putStrLn "prop_addCommutative"
-  quickCheck (prop_addCommutative :: Double -> Double -> Bool)
-  putStrLn "prop_mulCommutative"
-  quickCheck (prop_mulCommutative :: Double -> Double -> Bool)
-  putStrLn "prop_addAssociative"
-  quickCheck (prop_addAssociative :: Double -> Double -> Double -> Bool)
-  putStrLn "prop_mulAssociative"
-  quickCheck (prop_mulAssociative :: Double -> Double -> Double -> Bool)
-  putStrLn "prop_distributiveMulOverAdd"
-  quickCheck (prop_distributiveMulOverAdd :: Double -> Double -> Double -> Bool)
-  putStrLn "prop_divByItself"
-  quickCheck (prop_divByItself :: Double -> Property)
-  putStrLn "prop_divByZero"
-  quickCheck (prop_divByZero :: Double -> Bool)
-  putStrLn "prop_addSubInverse"
-  quickCheck (prop_addSubInverse :: Double -> Double -> Bool)
-  putStrLn "prop_mulDivInverse"
-  quickCheck (prop_mulDivInverse :: Double -> Double -> Property)
+  testQuiet "prop_addIdentity" (prop_addIdentity :: Double -> Bool)
+  testQuiet "prop_addCommutative" (prop_addCommutative :: Double -> Double -> Bool)
+  testQuiet "prop_mulCommutative" (prop_mulCommutative :: Double -> Double -> Bool)
+  testQuiet "prop_addAssociative" (prop_addAssociative :: Double -> Double -> Double -> Bool)
+  testQuiet "prop_mulAssociative" (prop_mulAssociative :: Double -> Double -> Double -> Bool)
+  testQuiet "prop_distributiveMulOverAdd" (prop_distributiveMulOverAdd :: Double -> Double -> Double -> Bool)
+  testQuiet "prop_divByItself" (prop_divByItself :: Double -> Property)
+  testQuiet "prop_divByZero" (prop_divByZero :: Double -> Bool)
+  testQuiet "prop_addSubInverse" (prop_addSubInverse :: Double -> Double -> Bool)
+  testQuiet "prop_mulDivInverse" (prop_mulDivInverse :: Double -> Double -> Property)
 
-  putStrLn "prop_expNonZero"
-  quickCheck (prop_expNonZero :: Double -> Double -> Property)
+  testQuiet "prop_expNonZero" (prop_expNonZero :: Double -> Double -> Property)
 
-  putStrLn "prop_expZero"
-  quickCheck (prop_zeroToZero :: Bool)
+  testQuiet "prop_expZero" (prop_zeroToZero :: Bool)
 
-  putStrLn "prop_zeroByZero"
-  quickCheck prop_zeroByZero
-  putStrLn "prop_smallDenominator"
-  quickCheck prop_smallDenominator
+  testQuiet "prop_zeroByZero" prop_zeroByZero
+  testQuiet "prop_smallDenominator" prop_smallDenominator
 
-  putStrLn "prop_negativePowerInteger"
-  quickCheck prop_negativePowerInteger
-  putStrLn "prop_negativePowerNonInteger"
-  quickCheck prop_negativePowerNonInteger
-  putStrLn "prop_negativePowerEvenInteger"
-  quickCheck prop_negativePowerEvenInteger
-  putStrLn "prop_negativePowerOddInteger"
-  quickCheck prop_negativePowerOddInteger
+  testQuiet "prop_negativePowerInteger" prop_negativePowerInteger
+  testQuiet "prop_negativePowerNonInteger" prop_negativePowerNonInteger
+  testQuiet "prop_negativePowerEvenInteger" prop_negativePowerEvenInteger
+  testQuiet "prop_negativePowerOddInteger" prop_negativePowerOddInteger
 
-  putStrLn "prop_exactAddition"
-  quickCheck prop_exactAddition
+  testQuiet "prop_exactAddition" prop_exactAddition
 
-  putStrLn "prop_precision"
-  quickCheck prop_precision
-  putStrLn "prop_errorPropagation"
-  quickCheck prop_errorPropagation
-  putStrLn "prop_sqrtNegative"
-  quickCheck prop_sqrtNegative
-  putStrLn "prop_multipleErrors"
-  quickCheck prop_multipleErrors
-  putStrLn "prop_mulDivIdentityNearZero"
-  quickCheck prop_mulDivIdentityNearZero
+  testQuiet "prop_precision" prop_precision
+  testQuiet "prop_errorPropagation" prop_errorPropagation
+  testQuiet "prop_sqrtNegative" prop_sqrtNegative
+  testQuiet "prop_multipleErrors" prop_multipleErrors
+  testQuiet "prop_mulDivIdentityNearZero" prop_mulDivIdentityNearZero
