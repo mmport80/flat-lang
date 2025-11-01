@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- {-# OPTIONS_GHC -Wall #-}
+
 module Parse
   ( parseProgram,
     Expr (..), -- (..) exports all constructors
@@ -11,24 +13,25 @@ module Parse
     testPipelineWithAssignment,
   )
 where
- 
+
 import ComplexRational (ComplexRational (CR))
-import Control.Monad (foldM, void, when)
+import Control.Monad (when)
 import Data.Char (isDigit)
-import Data.Complex (Complex (..))
 import Data.Either (isRight)
-import Data.Functor (void, ($>))
 import Data.Ratio ((%))
 import Data.Void (Void)
-import Test.QuickCheck (Arbitrary (arbitrary), Property, Testable (property), choose, counterexample, elements, forAll, frequency, oneof, quickCheck, sized, vectorOf, withMaxSuccess, (==>), Args (chatty), quickCheckWith, maxSuccess, isSuccess, quickCheckResult, quickCheckWithResult)
-import Test.QuickCheck.Gen (Gen)
-import Text.Megaparsec (MonadParsec (eof, notFollowedBy, try), ParseErrorBundle, Parsec, between, choice, many, option, optional, parse, satisfy, sepEndBy1, some, (<|>), SourcePos (sourceName, sourceColumn, sourceLine, SourcePos), getSourcePos, mkPos)
+import Test.QuickCheck (Arbitrary (arbitrary), Property, Testable (property), choose, counterexample, elements, vectorOf, (==>))
+import Test.QuickCheck.Test
+  ( Args (chatty),
+    quickCheck,
+    quickCheckWith,
+    stdArgs,
+  )
+import TestUtils
+import Text.Megaparsec (MonadParsec (eof, notFollowedBy, try), ParseErrorBundle, Parsec, SourcePos (SourcePos, sourceColumn, sourceLine, sourceName), between, choice, getSourcePos, many, mkPos, option, optional, parse, satisfy, sepEndBy1, some, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, letterChar, space1, string)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Error (errorBundlePretty)
-import Test.QuickCheck.Test
-    ( quickCheck, quickCheckWith, stdArgs, Args(chatty) )
-
 
 type Parser = Parsec Void String
 
@@ -110,58 +113,69 @@ data Op = Add | Sub | Mul | Div | Pow
 data UnaryOp = Neg | Sqrt | Abs | OpAsCombinator Op
   deriving (Show, Eq)
 
-
 complexOpEndingExpr :: Parser (Expr -> Expr)
 complexOpEndingExpr = do
   e <- addExpr
   op <- Div <$ symbol "/" <|> Mul <$ symbol "*" <|> Add <$ symbol "+" <|> Sub <$ symbol "-"
   -- e goes LEFT, piped value goes RIGHT (to match original placeholder position)
   return $ \pipedValue -> BinOp op e pipedValue
-  
+
 -- Replace your pipelineOp with this:
-pipelineOp :: Parser (Expr -> Expr)  -- Returns a FUNCTION instead of Expr
+pipelineOp :: Parser (Expr -> Expr) -- Returns a FUNCTION instead of Expr
 pipelineOp =
   choice
-    [ 
-      try prefixBinaryOp,     -- /2 meaning x/2
-      try postfixBinaryOp,    -- 2/ meaning 2/x  
-      try incompleteOp,       -- +2 meaning x+2
-      try unaryPipeOp,        -- sqrt meaning sqrt x
-      (\x -> Pipeline x) <$> addExpr  -- Default: keep as pipeline
+    [ try prefixBinaryOp, -- /2 meaning x/2
+      try postfixBinaryOp, -- 2/ meaning 2/x
+      try incompleteOp, -- +2 meaning x+2
+      try unaryPipeOp, -- sqrt meaning sqrt x
+      (\x -> Pipeline x) <$> addExpr -- Default: keep as pipeline
     ]
   where
     -- Handle incomplete binary operations - NO PLACEHOLDERS!
     incompleteOp = do
-      op <- choice [Add <$ symbol "+", Sub <$ symbol "-", 
-                   Mul <$ symbol "*", Div <$ symbol "/"]
+      op <-
+        choice
+          [ Add <$ symbol "+",
+            Sub <$ symbol "-",
+            Mul <$ symbol "*",
+            Div <$ symbol "/"
+          ]
       expr <- addExpr
       -- Return FUNCTION that takes left operand
       pure $ \leftExpr -> BinOp op leftExpr expr
-      
+
     -- Postfix operator (e.g., "2/") - NO PLACEHOLDERS!
     postfixBinaryOp = do
       val <- number
-      op <- choice [Div <$ symbol "/", Mul <$ symbol "*",
-                   Add <$ symbol "+", Sub <$ symbol "-"]
-      -- Return FUNCTION that takes right operand  
+      op <-
+        choice
+          [ Div <$ symbol "/",
+            Mul <$ symbol "*",
+            Add <$ symbol "+",
+            Sub <$ symbol "-"
+          ]
+      -- Return FUNCTION that takes right operand
       pure $ \rightExpr -> BinOp op (Lit val) rightExpr
-      
+
     -- Prefix operator (e.g., "/2") - NO PLACEHOLDERS!
     prefixBinaryOp = do
-      op <- choice [Div <$ symbol "/", Mul <$ symbol "*",
-                   Add <$ symbol "+"]
+      op <-
+        choice
+          [ Div <$ symbol "/",
+            Mul <$ symbol "*",
+            Add <$ symbol "+"
+          ]
       val <- number
       -- Return FUNCTION that takes left operand
       pure $ \leftExpr -> BinOp op leftExpr (Lit val)
-      
+
     -- Unary operators - NO PLACEHOLDERS!
-    unaryPipeOp = choice
-      [
-        (\x -> UnOp Sqrt x) <$ try (string "sqrt" <* notFollowedBy alphaNumChar),
-        (\x -> UnOp Abs x) <$ try (string "abs" <* notFollowedBy alphaNumChar),
-        (\x -> UnOp Neg x) <$ try (string "-" *> notFollowedBy (satisfy isDigit))
-      ]
-      
+    unaryPipeOp =
+      choice
+        [ (\x -> UnOp Sqrt x) <$ try (string "sqrt" <* notFollowedBy alphaNumChar),
+          (\x -> UnOp Abs x) <$ try (string "abs" <* notFollowedBy alphaNumChar),
+          (\x -> UnOp Neg x) <$ try (string "-" *> notFollowedBy (satisfy isDigit))
+        ]
 
 -- Update your expr function:
 expr :: Parser Expr
@@ -170,15 +184,14 @@ expr = do
   pipelineFuncs <- many $ try $ do
     _ <- symbol "|>"
     sc
-    pipelineOp  -- Now returns (Expr -> Expr)
+    pipelineOp -- Now returns (Expr -> Expr)
   pure $ foldl (\acc f -> f acc) initial pipelineFuncs
-  
 
 addExpr :: Parser Expr
 addExpr = do
   initial <- mulExpr
   rest <- many $ try $ do
-    op <- Add <$ symbol "+" <|> Sub <$ symbol "-"  
+    op <- Add <$ symbol "+" <|> Sub <$ symbol "-"
     term <- mulExpr
     pure (op, term)
   pure $ foldl (\acc (op, term) -> BinOp op acc term) initial rest
@@ -204,7 +217,7 @@ powExpr = do
 term :: Parser Expr
 term =
   choice
-    [ --between (symbol "(") (symbol ")") expr,
+    [ -- between (symbol "(") (symbol ")") expr,
       UnOp Sqrt <$> (try (symbol "sqrt" <* notFollowedBy alphaNumChar) *> term),
       UnOp Abs <$> (try (symbol "abs" <* notFollowedBy alphaNumChar) *> term),
       Lit <$> number,
@@ -280,7 +293,7 @@ prop_pipelinePostDivEquiv (ValidName x) n =
                 (Just e1, Just e2) -> stripSourcePos e1 == stripSourcePos e2
                 _ -> result1 == result2
            in counterexample
-                ( "Expr1: " ++ show result1 ++ "\nExpr2: " ++ show result2 )
+                ("Expr1: " ++ show result1 ++ "\nExpr2: " ++ show result2)
                 compareExprs
 
 -- Correct property test for whitespace invariance
@@ -377,20 +390,13 @@ prop_pipelineNestedExpr (ValidName x) a b =
 makeAssignment :: String -> String -> String
 makeAssignment name expr = name ++ " = " ++ expr
 
-testQuiet :: Testable prop => [Char] -> prop -> IO ()
-testQuiet name prop = do
-  result <- quickCheckWithResult stdArgs { chatty = False, maxSuccess = 100 } prop
-  if isSuccess result 
-    then putStr "."
-    else putStrLn $ "\n" ++ name ++ " FAILED"
-    
 -- Main property test function
 test :: IO ()
 test = do
   testQuiet "Testing pipeline division equivalence..." prop_pipelineDivEquiv
   testQuiet "Testing pipeline postfix division equivalence..." prop_pipelinePostDivEquiv
   testQuiet "Testing whitespace invariance..." prop_whitespaceInvariance
-  testQuiet "Testing pipeline prefix operations..."prop_pipelinePrefixOp
+  testQuiet "Testing pipeline prefix operations..." prop_pipelinePrefixOp
   testQuiet "Testing pipeline postfix operations..." prop_pipelinePostfixOp
   testQuiet "Testing mixed pipeline operations..." prop_pipelineMixedOps
   testQuiet "Testing multi-step pipelines..." prop_pipelineMultiStep
