@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Ops (Cell (..), abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘), sqrtCR, Operation (..)) where
+module Ops (test, Cell (..), abs', from, negate', sqrt', to, (⊕), (⊖), (⊗), (⊘), sqrtCR, Operation (..)) where
 
 import ComplexRational (ComplexRational (..), addCR, divCR, magnitudeCR, maybePowCR, mulCR, sqrtCR, subCR)
 import Control.Applicative (liftA2)
