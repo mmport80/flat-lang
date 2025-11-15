@@ -241,6 +241,14 @@ program = between sc eof (sepEndBy1 topLevel sc)
 parseProgram :: String -> Either (ParseErrorBundle String Void) [TopLevel]
 parseProgram = parse program ""
 
+----------
+----------
+----------
+----------
+----------
+----------
+----------
+----------
 ---------- Tests
 
 -- Generate valid identifier names
@@ -255,7 +263,6 @@ instance Arbitrary ValidName where
     return $ ValidName (firstChar : rest)
 
 ---------- Helper functions for tests
-
 -- Dummy SourcePos for comparing expressions
 dummyPos :: SourcePos
 dummyPos = SourcePos {sourceName = "", sourceLine = mkPos 1, sourceColumn = mkPos 1}
@@ -375,10 +382,6 @@ prop_pipelineNestedExpr (ValidName x) a b =
     parseProgram $
       makeAssignment "result" $
         x ++ " |> *" ++ show a ++ " |> /" ++ show b ++ " |> +" ++ show a
-
--- Helper to make a complete assignment
-makeAssignment :: String -> String -> String
-makeAssignment name expr = name ++ " = " ++ expr
 
 -- Main property test function
 test :: IO ()

@@ -14,3 +14,7 @@ testQuiet name prop = do
   if isSuccess result
     then putStr "."
     else putStrLn $ "\n" ++ name ++ " FAILED"
+
+-- Helper to make a complete assignment for parsing tests
+makeAssignment :: String -> String -> String
+makeAssignment name expr = name ++ " = " ++ expr
