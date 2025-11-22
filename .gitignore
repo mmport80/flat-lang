@@ -3,3 +3,4 @@ output/*
 *~
 *#*
 .direnv
+.DS_Store
