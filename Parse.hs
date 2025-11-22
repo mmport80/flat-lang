@@ -8,9 +8,8 @@ module Parse
     TopLevel (..),
     Op (..),
     UnaryOp (..),
-    test,
-    testDebug,
-    testPipelineWithAssignment,
+    sc,
+    expr,
   )
 where
 
@@ -177,7 +176,6 @@ pipelineOp =
           (\x -> UnOp Neg x) <$ try (string "-" *> notFollowedBy (satisfy isDigit))
         ]
 
--- Update your expr function:
 expr :: Parser Expr
 expr = do
   initial <- addExpr

@@ -1,7 +1,11 @@
 module ParseTests (test) where
 
+import ComplexRational
+import Data.Either
+import Data.Void
 import Parse
 import Test.QuickCheck
+import TestUtils
 import Text.Megaparsec
 
 -- Generate valid identifier names

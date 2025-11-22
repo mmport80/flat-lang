@@ -1,7 +1,7 @@
 module Tests where
 
 import OpsTests qualified
-import Parse qualified
+import ParseTests qualified
 
 test :: IO ()
 test = do
