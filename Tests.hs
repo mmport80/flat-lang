@@ -1,6 +1,6 @@
 module Tests where
 
-import Ops qualified
+import OpsTests qualified
 import Parse qualified
 
 test :: IO ()
@@ -9,7 +9,7 @@ test = do
   Parse.test
 
   putStrLn "\n=== Ops Tests ==="
-  Ops.test
+  OpsTests.test
 
 main :: IO ()
 main = test
