@@ -6,7 +6,7 @@ import Parse qualified
 test :: IO ()
 test = do
   putStrLn "=== Parse Tests ==="
-  Parse.test
+  ParseTests.test
 
   putStrLn "\n=== Ops Tests ==="
   OpsTests.test
